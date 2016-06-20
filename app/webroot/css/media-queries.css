@@ -1,0 +1,141 @@
+@media screen and (min-width: 0px) and (max-width: 960px) {
+    
+    body-2{
+        
+        background-image: url(../img/fondo-movil1.jpg)!important;
+        background-size: cover;
+        background-repeat: no-repeat;
+    }
+    
+    body{
+        
+        background-image: url(../img/fondo-movil2-02.png)!important;
+        background-size: 125%;
+        background-repeat: no-repeat;
+    }
+    
+    .navbar-brand img {
+    width: 60px;
+    margin-top: -5px;
+    z-index: 9999999;
+    }
+    
+    #myCarousel{
+        display: none;
+    }
+    
+    .carousel slide{
+        display: none;
+    }
+    
+    .navbar-wrapper{
+        display: block;
+        margin-bottom: 60px!important;
+    }
+    
+    .none{
+        display: none;
+    }
+    
+    footer{
+        margin-top: 50px;
+    }
+    
+    .marketing img{
+        max-width: 200px;
+        max-height: 200px;
+    }
+    
+    .featurette-divider {
+        margin: 30px 0!important; /* Space out the Bootstrap <hr> more */
+    }
+    
+    .navbar-inverse .navbar-collapse, .navbar-inverse .navbar-form {
+    margin-top: 12px;
+    }
+    
+  }
+
+@media screen and (min-width: 681px) and (max-width: 960px) {
+    
+
+    
+    .body{
+        
+        background-image: url(../img/fondo-movil2-02.png);
+        background-size: 100%;
+        background-repeat: no-repeat;
+    }
+    
+    h2{
+        font-size: 6em!important;
+        margin-bottom: 60px;
+    }
+    
+    #myCarousel{
+        display: none;
+    }
+    
+    .carousel slide{
+        display: none;
+    }
+    
+    .navbar-wrapper{
+        display: block;
+        margin-bottom: 120px!important;
+    }
+    
+    .none{
+        display: none;
+    }
+    
+    footer{
+        margin-top: 50px;
+    }
+    
+    .marketing img{
+        max-width: 400px;
+        max-height: 400px;
+    }
+    
+    .navbar-nav{
+        display: ;
+    }
+}
+
+@media screen and (min-width: 768px) and (max-width: 960px) {
+    .volver{
+        display: none;
+    }
+}
+
+@media screen and (min-width: 961px) and (max-width: 1199px) {
+    
+    h2{
+        font-size: 4em;
+        margin-bottom: 60px;
+    }
+    
+}
+
+
+@media screen and (min-width: 961px) {
+    
+    .process{
+    margin-top: 80px!important;
+    }
+    
+    .marketing{
+    margin-top: 120px!important;
+    }
+    
+    h2{
+        margin: 80px;
+    }
+    
+    .volver{
+        display: none;
+    }
+    
+}
+

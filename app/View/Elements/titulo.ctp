@@ -1,0 +1,1 @@
+  <title>Sistema Gestión Clínica</title>

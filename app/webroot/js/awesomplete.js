@@ -1,0 +1,1746 @@
+/**
+ * Simple, lightweight, usable local autocomplete library for modern browsers
+ * Because there weren’t enough autocomplete scripts in the world? Because I’m completely insane and have NIH syndrome? Probably both. :P
+ * @author Lea Verou http://leaverou.github.io/awesomplete
+ * MIT license
+ */
+
+(function () {
+
+var _ = function (input, o) {
+	var me = this;
+
+	// Setup
+
+	this.input = $(input);
+	this.input.setAttribute("autocomplete", "off");
+	this.input.setAttribute("aria-autocomplete", "list");
+
+	o = o || {};
+
+	configure(this, {
+		minChars: 2,
+		maxItems: 10,
+		autoFirst: false,
+		data: _.DATA,
+		filter: _.FILTER_CONTAINS,
+		sort: _.SORT_BYLENGTH,
+		item: _.ITEM,
+		replace: _.REPLACE
+	}, o);
+
+	this.index = -1;
+
+	// Create necessary elements
+
+	this.container = $.create("div", {
+		className: "awesomplete",
+		around: input
+	});
+
+	this.ul = $.create("ul", {
+		hidden: "hidden",
+		inside: this.container
+	});
+
+	this.status = $.create("span", {
+		className: "visually-hidden",
+		role: "status",
+		"aria-live": "assertive",
+		"aria-relevant": "additions",
+		inside: this.container
+	});
+
+	// Bind events
+
+	$.bind(this.input, {
+		"input": this.evaluate.bind(this),
+		"blur": this.close.bind(this),
+		"keydown": function(evt) {
+			var c = evt.keyCode;
+
+			// If the dropdown `ul` is in view, then act on keydown for the following keys:
+			// Enter / Esc / Up / Down
+			if(me.opened) {
+				if (c === 13 && me.selected) { // Enter
+					evt.preventDefault();
+					me.select();
+				}
+				else if (c === 27) { // Esc
+					me.close();
+				}
+				else if (c === 38 || c === 40) { // Down/Up arrow
+					evt.preventDefault();
+					me[c === 38? "previous" : "next"]();
+				}
+			}
+		}
+	});
+
+	$.bind(this.input.form, {"submit": this.close.bind(this)});
+
+	$.bind(this.ul, {"mousedown": function(evt) {
+		var li = evt.target;
+
+		if (li !== this) {
+
+			while (li && !/li/i.test(li.nodeName)) {
+				li = li.parentNode;
+			}
+
+			if (li && evt.button === 0) {  // Only select on left click
+				evt.preventDefault();
+				me.select(li, evt.target);
+			}
+		}
+	}});
+
+	if (this.input.hasAttribute("list")) {
+		this.list = "#" + this.input.getAttribute("list");
+		this.input.removeAttribute("list");
+	}
+	else {
+		this.list = this.input.getAttribute("data-list") || o.list || [];
+	}
+
+	_.all.push(this);
+};
+
+_.prototype = {
+	set list(list) {
+		if (Array.isArray(list)) {
+			this._list = list;
+		}
+		else if (typeof list === "string" && list.indexOf(",") > -1) {
+				this._list = list.split(/\s*,\s*/);
+		}
+		else { // Element or CSS selector
+			list = $(list);
+
+			if (list && list.children) {
+				var items = [];
+				slice.apply(list.children).forEach(function (el) {
+					if (!el.disabled) {
+						var text = el.textContent.trim();
+						var value = el.value || text;
+						var label = el.label || text;
+						if (value !== "") {
+							items.push({ label: label, value: value });
+						}
+					}
+				});
+				this._list = items;
+			}
+		}
+
+		if (document.activeElement === this.input) {
+			this.evaluate();
+		}
+	},
+
+	get selected() {
+		return this.index > -1;
+	},
+
+	get opened() {
+		return !this.ul.hasAttribute("hidden");
+	},
+
+	close: function () {
+		this.ul.setAttribute("hidden", "");
+		this.index = -1;
+
+		$.fire(this.input, "awesomplete-close");
+	},
+
+	open: function () {
+		this.ul.removeAttribute("hidden");
+
+		if (this.autoFirst && this.index === -1) {
+			this.goto(0);
+		}
+
+		$.fire(this.input, "awesomplete-open");
+	},
+
+	next: function () {
+		var count = this.ul.children.length;
+
+		this.goto(this.index < count - 1? this.index + 1 : -1);
+	},
+
+	previous: function () {
+		var count = this.ul.children.length;
+
+		this.goto(this.selected? this.index - 1 : count - 1);
+	},
+
+	// Should not be used, highlights specific item without any checks!
+	goto: function (i) {
+		var lis = this.ul.children;
+
+		if (this.selected) {
+			lis[this.index].setAttribute("aria-selected", "false");
+		}
+
+		this.index = i;
+
+		if (i > -1 && lis.length > 0) {
+			lis[i].setAttribute("aria-selected", "true");
+			this.status.textContent = lis[i].textContent;
+
+			$.fire(this.input, "awesomplete-highlight", {
+				text: this.suggestions[this.index]
+			});
+		}
+	},
+
+	select: function (selected, origin) {
+		if (selected) {
+			this.index = $.siblingIndex(selected);
+		} else {
+			selected = this.ul.children[this.index];
+		}
+
+		if (selected) {
+			var suggestion = this.suggestions[this.index];
+
+			var allowed = $.fire(this.input, "awesomplete-select", {
+				text: suggestion,
+				origin: origin || selected
+			});
+
+			if (allowed) {
+				this.replace(suggestion);
+				this.close();
+				$.fire(this.input, "awesomplete-selectcomplete", {
+					text: suggestion
+				});
+			}
+		}
+	},
+
+	evaluate: function() {
+		var me = this;
+		var value = this.input.value;
+
+		if (value.length >= this.minChars && this._list.length > 0) {
+			this.index = -1;
+			// Populate list with options that match
+			this.ul.innerHTML = "";
+
+			this.suggestions = this._list
+				.map(function(item) {
+					return new Suggestion(me.data(item, value));
+				})
+				.filter(function(item) {
+					return me.filter(item, value);
+				})
+				.sort(this.sort)
+				.slice(0, this.maxItems);
+
+			this.suggestions.forEach(function(text) {
+					me.ul.appendChild(me.item(text, value));
+				});
+
+			if (this.ul.children.length === 0) {
+				this.close();
+			} else {
+				this.open();
+			}
+		}
+		else {
+			this.close();
+		}
+	}
+};
+
+// Static methods/properties
+
+_.all = [];
+
+_.FILTER_CONTAINS = function (text, input) {
+	return RegExp($.regExpEscape(input.trim()), "i").test(text);
+};
+
+_.FILTER_STARTSWITH = function (text, input) {
+	return RegExp("^" + $.regExpEscape(input.trim()), "i").test(text);
+};
+
+_.SORT_BYLENGTH = function (a, b) {
+	if (a.length !== b.length) {
+		return a.length - b.length;
+	}
+
+	return a < b? -1 : 1;
+};
+
+_.ITEM = function (text, input) {
+	var html = input === '' ? text : text.replace(RegExp($.regExpEscape(input.trim()), "gi"), "<mark>$&</mark>");
+	return $.create("li", {
+		innerHTML: html,
+		"aria-selected": "false"
+	});
+};
+
+_.REPLACE = function (text) {
+	this.input.value = text.value;
+};
+
+_.DATA = function (item/*, input*/) { return item; };
+
+// Private functions
+
+function Suggestion(data) {
+	var o = Array.isArray(data)
+	  ? { label: data[0], value: data[1] }
+	  : typeof data === "object" && "label" in data && "value" in data ? data : { label: data, value: data };
+
+	this.label = o.label || o.value;
+	this.value = o.value;
+}
+Object.defineProperty(Suggestion.prototype = Object.create(String.prototype), "length", {
+	get: function() { return this.label.length; }
+});
+Suggestion.prototype.toString = Suggestion.prototype.valueOf = function () {
+	return "" + this.label;
+};
+
+function configure(instance, properties, o) {
+	for (var i in properties) {
+		var initial = properties[i],
+		    attrValue = instance.input.getAttribute("data-" + i.toLowerCase());
+
+		if (typeof initial === "number") {
+			instance[i] = parseInt(attrValue);
+		}
+		else if (initial === false) { // Boolean options must be false by default anyway
+			instance[i] = attrValue !== null;
+		}
+		else if (initial instanceof Function) {
+			instance[i] = null;
+		}
+		else {
+			instance[i] = attrValue;
+		}
+
+		if (!instance[i] && instance[i] !== 0) {
+			instance[i] = (i in o)? o[i] : initial;
+		}
+	}
+}
+
+// Helpers
+
+var slice = Array.prototype.slice;
+
+function $(expr, con) {
+	return typeof expr === "string"? (con || document).querySelector(expr) : expr || null;
+}
+
+function $$(expr, con) {
+	return slice.call((con || document).querySelectorAll(expr));
+}
+
+$.create = function(tag, o) {
+	var element = document.createElement(tag);
+
+	for (var i in o) {
+		var val = o[i];
+
+		if (i === "inside") {
+			$(val).appendChild(element);
+		}
+		else if (i === "around") {
+			var ref = $(val);
+			ref.parentNode.insertBefore(element, ref);
+			element.appendChild(ref);
+		}
+		else if (i in element) {
+			element[i] = val;
+		}
+		else {
+			element.setAttribute(i, val);
+		}
+	}
+
+	return element;
+};
+
+$.bind = function(element, o) {
+	if (element) {
+		for (var event in o) {
+			var callback = o[event];
+
+			event.split(/\s+/).forEach(function (event) {
+				element.addEventListener(event, callback);
+			});
+		}
+	}
+};
+
+$.fire = function(target, type, properties) {
+	var evt = document.createEvent("HTMLEvents");
+
+	evt.initEvent(type, true, true );
+
+	for (var j in properties) {
+		evt[j] = properties[j];
+	}
+
+	return target.dispatchEvent(evt);
+};
+
+$.regExpEscape = function (s) {
+	return s.replace(/[-\\^$*+?.()|[\]{}]/g, "\\$&");
+};
+
+$.siblingIndex = function (el) {
+	/* eslint-disable no-cond-assign */
+	for (var i = 0; el = el.previousElementSibling; i++);
+	return i;
+};
+
+// Initialization
+
+function init() {
+	$$("input.awesomplete").forEach(function (input) {
+		new _(input);
+	});
+}
+
+// Are we in a browser? Check for Document constructor
+if (typeof Document !== "undefined") {
+	// DOM already loaded?
+	if (document.readyState !== "loading") {
+		init();
+	}
+	else {
+		// Wait for it
+		document.addEventListener("DOMContentLoaded", init);
+	}
+}
+
+_.$ = $;
+_.$$ = $$;
+
+// Make sure to export Awesomplete on self when in a browser
+if (typeof self !== "undefined") {
+	self.Awesomplete = _;
+}
+
+// Expose Awesomplete as a CJS module
+if (typeof module === "object" && module.exports) {
+	module.exports = _;
+}
+
+return _;
+
+}());
+
+
+
+var input = document.getElementById("cod-ref");
+new Awesomplete(input, {
+	list: ["BP-04M3",
+"BP-05M3",
+"C083-4090MG4",
+"C084-6419MG4",
+"C086-0580M1",
+"C086-6405.04",
+"C100-3402.16",
+"C100-9305-MZE",
+"C100-9305.16",
+"C190-0640MG2",
+"C190-0998-MZ8",
+"C210-0645MZA",
+"C210-0999-MZ5",
+"C210-3087MZ6",
+"C210-3504-MZE",
+"C210-9604MZF",
+"C271-0100.04",
+"C275-9605M1",
+"C275-9606MZG",
+"C551-0220MZ2",
+"C562-1142MG4",
+"C562-1150.17",
+"C565-6520-MZD",
+"C565-9410M3",
+"C572-6402MG4",
+"C850-0600-510",
+"C850-0600-520",
+"C850-0600.04",
+"C850-0900-520",
+"C850-0900.04",
+"C950-9441MG4",
+"CM-001M1",
+"CM-002M3",
+"CM-003M1",
+"CM-007M1",
+"CM-008M1",
+"CM-010M1",
+"CM-011M1",
+"CM-015M1",
+"CM-016M1",
+"CM-017M1",
+"CM-019M1",
+"CM-030M1",
+"CM-031M1",
+"CM-033M1",
+"CM-035M1",
+"CM-038M1",
+"CM-040M1",
+"CM-042M1",
+"CM-043M1",
+"CM-050M1",
+"CM-060M1",
+"CM-062M1",
+"CM-063M1",
+"CM-064M1",
+"CM-065M1",
+"CM-068M1",
+"CM-069M1",
+"CM-070M1",
+"CM-071M1",
+"CM-073M1",
+"CM-074M1",
+"CM-075M1",
+"CM-076M1",
+"CM-100M3",
+"CM-102M3",
+"CM-103M1",
+"CM-105M1",
+"CM-106M1",
+"CM-107M1",
+"CM-108M1",
+"CM-110M1",
+"CM-112M1",
+"CM-116M1",
+"CM-117M1",
+"CM-200M1",
+"CM-201M1",
+"CM-202M1",
+"CM-203M1",
+"CM-204M1",
+"CM-205M1",
+"CM-206M1",
+"CM-207M1",
+"CM-209M1",
+"CM-212M1",
+"CM-213M1",
+"CM-214M1",
+"CR-303M1",
+"CR-309M1",
+"CR-311M1",
+"CR-315M1",
+"CR-332M1",
+"CR-338M1",
+"CR-377M1",
+"CX-10E03",
+"CX-12E03",
+"CX-13E03",
+"CX-14E03",
+"D7000GL",
+"D7010GL",
+"D7020AL",
+"D7030AL",
+"D7030GL",
+"D7040AL",
+"D7080AL",
+"D7090AL",
+"D7100AL",
+"D7110AL",
+"D7170AL",
+"D7180AL",
+"D7190AL",
+"D7200AL",
+"D7210AL",
+"D7230AL",
+"D7240AL",
+"D7250AL",
+"D7280AL",
+"D7290AL",
+"D7320AL",
+"D7340AL",
+"D7350AL",
+"D7360AL",
+"D7370AL",
+"D7400GL",
+"D7410AL",
+"D7440AL",
+"D7460AL",
+"D7480AL",
+"D7490AL",
+"D7500AL",
+"D7510AL",
+"D7520AL",
+"D7530AL",
+"D7540AL",
+"D7560AL",
+"D7570AL",
+"D7590AL",
+"D7610AL",
+"D7630AL",
+"D7650AL",
+"D7670AL",
+"D7680AL",
+"D7690AL",
+"D7700GL",
+"D7710GL",
+"D7720AL",
+"D7720GL",
+"D7730AL",
+"D7760AL",
+"D7770AL",
+"D7780AL",
+"D7790AL",
+"D7800AL",
+"D7850AL",
+"D7870AL",
+"D7880AL",
+"D7890AL",
+"D7900AL",
+"D7920AL",
+"D7930AL",
+"D7940AL",
+"D7950AL",
+"D7970AL",
+"D8000AL",
+"D80100FL",
+"D80170FL",
+"D8030AL",
+"D8070JL",
+"D8080JL",
+"D8115.11",
+"D8115M1",
+"D8117M1",
+"D8140AL",
+"D8180LS",
+"D8200AL",
+"D8370JL",
+"D8390AL",
+"D8390FL",
+"D8401.E5",
+"D8410AL",
+"D8421/E0.4",
+"D8510AL",
+"D8540AL",
+"D8630AL",
+"D8680AL",
+"D8950AL",
+"D8990AL",
+"D9020/E0.35",
+"D9021/E0.35",
+"D9022/E0.35",
+"D9023/E0.35",
+"D9420AL",
+"D9430AL",
+"D9440AL",
+"D9450AL",
+"D9460AL",
+"D9520AL",
+"D9530AL",
+"D9540AL",
+"D9550AL",
+"D9560AL",
+"D9570AL",
+"D9580AL",
+"D9590AL",
+"D9600AL",
+"D9610AL",
+"D9640AL",
+"D9650AL",
+"D9660AL",
+"D9670AL",
+"D9680AL",
+"D9690AL",
+"D9700AL",
+"D9710AL",
+"D9760AL",
+"D9770AL",
+"D9780AL",
+"D9790AL",
+"D9800AL",
+"D9810AL",
+"D9830AL",
+"D9850AL",
+"D9890AL",
+"D9900AL",
+"D9910AL",
+"DC3000.20",
+"DC30000ZL",
+"DC40000ZL",
+"DCH3070.11",
+"DCH3070.8Z",
+"DCH3085.11",
+"DCH3085.8Z",
+"DOX113",
+"DOX125",
+"DOX251",
+"DOX251L",
+"DUL1800.17",
+"DUL18000BK",
+"DUL20110AL",
+"DUL2021.32",
+"DUL20300ZLP",
+"DUL2031AAHP",
+"DUL2042.32",
+"DUL2045MZ9",
+"DUL6040GL",
+"DUL6050GL",
+"DUL6120AL",
+"DUL6210AL",
+"DUL6230AL",
+"DUL6310AL",
+"DUL6320AL",
+"DUL6350AL",
+"DUL6360AL",
+"DUL6380AL",
+"DUL6420AL",
+"DUL6440AL",
+"DUL6450AL",
+"DUL6460AL",
+"DUL6470GL",
+"DUL6480AL",
+"DUL6490AL",
+"DUL6710GL",
+"DUL6750GL",
+"DUL6900AL",
+"DUL6910AL",
+"DUL6920AL",
+"DUL6930AL",
+"DUL6980AL",
+"DUL6990AL",
+"DUL7000AL",
+"DUL7010AL",
+"DUL7040AL",
+"DUL7080AL",
+"DUL7100AL",
+"DUL7130AL",
+"DUL92910AL",
+"DUL9294MG4",
+"EC800.01",
+"ECA81.900",
+"ECA83.900",
+"ECH8075.900",
+"F3000GL",
+"F3010GL",
+"F3020GL",
+"F3040GL",
+"F3050GL",
+"F3060GL",
+"F3080GL",
+"F3090GL",
+"F3100GL",
+"F3110GL",
+"F3120GL",
+"F3130GL",
+"F3140GL",
+"F3150GL",
+"F3170GL",
+"F3180GL",
+"F3190GL",
+"F3200GL",
+"F3210GL",
+"F3230GL",
+"F3240GL",
+"F3250GL",
+"F3410JL",
+"F3420GL",
+"F3430JL",
+"F3510JL",
+"F3520GL",
+"F359.11",
+"F3590AL",
+"F3620AL",
+"F3630AL",
+"F3650BL",
+"F3720JL",
+"F3730JL",
+"F3810AL",
+"F3900JL",
+"F3920GL",
+"F3930HL",
+"F3980JL",
+"F4200JL",
+"F4210GL",
+"P190-376-E1",
+"P190-6100-N4",
+"P190-61000AL",
+"P190-625-E1",
+"P190-625-E5",
+"P190-630-E5",
+"P192-475-E1",
+"P192-528-E2",
+"P192-528.11",
+"P192-5600-E2",
+"P210-6270-N2",
+"P210-842-E1",
+"P210-922-E1",
+"P273-1051-E1",
+"P420-902-E1C",
+"P420-903-E1C",
+"P420-904-E1C",
+"P420-905-E1C",
+"P420-907-E1C",
+"P420-908-E1C",
+"P420-910-E1C",
+"P420-920-E1C",
+"P420-926-E1C",
+"P420-930-E1C",
+"P420-933-E3",
+"P420-938-E1C",
+"P420-942-E1C",
+"P420-952-E1C",
+"P420-952-E3",
+"P420-960-E1C",
+"P420-975-E1C",
+"P420-977-E1C",
+"P420-978-E1C",
+"P420-981-E1C",
+"P420-982-E1C",
+"P420-983-E1C",
+"P425-900-E3",
+"P425-921-E1C",
+"P425-922-E1C",
+"P425-941-E3",
+"P425-941/E2.5",
+"P425-948-E1C",
+"P425-950-E1C",
+"P425-954-E1C",
+"P425-956/E1",
+"P425-957-E1C",
+"P425-971-E1C",
+"P425-984-E1C",
+"P425-985-E1C",
+"P425-986-E3",
+"P425-987-E3",
+"P425-988-E1C",
+"P425-989-E1C",
+"P425-991/E1",
+"P425-992-E1C",
+"P425-998-E1C",
+"P425-EB02-E1C",
+"P426-HE01.11",
+"P426-HE03-E1C",
+"P426-HE04-E1C",
+"P426-HE05-E1C",
+"P426-HE07/E1",
+"P426-PP05-E1C",
+"P426-PP06-E1C",
+"P426-PP07-E1C",
+"P426-PP08-E1C",
+"P426-PP09-E1C",
+"P426-PP10-E1C",
+"P426-PP60-E1C",
+"P426-PP61-E1C",
+"P426-PP62-E1C",
+"P426-PP63-E1C",
+"P426-PP64-E1C",
+"P426-PP65-E1C",
+"P426-PP68-E03",
+"P429-923-E1C",
+"P429-937-E1C",
+"P429-961-E1C",
+"P429-967-E1C",
+"P429-972-E1C",
+"P429-973-E1C",
+"P429-976-E1C",
+"P429-980-E1C",
+"P433-XR10-E03",
+"P433-XR11-E03",
+"P433-XR12-E03",
+"P433-XR13-E03",
+"P433-XR14-E03",
+"P433-XR15-E03",
+"P433-XR16-E03",
+"P433-XR18-E03",
+"P434-CS31-E03",
+"P434-CS32-E03",
+"P434-CS33-E03",
+"P434-CS34-E03",
+"P565-554-E1",
+"P565-761-E1",
+"P572-4001-NG2",
+"P850-1401-E1",
+"P850-1492-E5",
+"PRLX1KAAH",
+"PRLX2KAAH",
+"PRLX3KAAH",
+"PRLX4KAAH",
+"PRLX5KAAH",
+"PRLX6KAAH",
+"PRLX7KAAH",
+"PRLX8KAAH",
+"SX1070",
+"T400.E2",
+"T4000.E0.5",
+"T4001.E0.5",
+"T4002.E0.5",
+"T4003.E0.5",
+"T4004.E0.5",
+"T4005.E0.5",
+"T4006.E0.5",
+"T4008.E0.25",
+"T4008.E0.5",
+"T401.E0.5",
+"T402.E0.5",
+"T403/E0.5",
+"T4031.E0.25",
+"T4031.E0.5",
+"T4032.E0.25",
+"T4032.E0.5",
+"T4033.E0.25",
+"T4033.E0.5",
+"T4034.E0.25",
+"T4034.E0.5",
+"T404.E0.5",
+"T4040.E0.5",
+"T405.E0.5",
+"T406.E1",
+"T407.E2",
+"T409.E2",
+"T411.E1",
+"T412.E1",
+"T413.E1",
+"T414.E2",
+"T415.E0.5",
+"T420.E1",
+"T421.E0.5",
+"T422.E0.5",
+"T423.E0.5",
+"T425.E0.5",
+"T426.E0.5",
+"T427.E1",
+"T4281/E0.5",
+"T429.E0.5",
+"T430.E1",
+"T431.E1",
+"T4311/E0.5",
+"T432.E1",
+"T4321/E0.5",
+"T433.E0.5",
+"T4341/E0.5",
+"T4342/E0.5",
+"T4343/E0.5",
+"T435.E1",
+"T436.E0.5",
+"T438.E1",
+"T440.E0.5",
+"T441.E0.5",
+"T442.E0.5",
+"T443.E1",
+"T444.E1",
+"T445.E0.5",
+"T447.E1",
+"T448.E1",
+"T451.E0.5",
+"T452.E0.5",
+"T453.E1",
+"T454.E1",
+"T455.E0.5",
+"T456.E1",
+"T457/E0.5",
+"T458.E0.5",
+"T459.E1",
+"T460.E0.5",
+"T461.E0.5",
+"T462.E1",
+"T465.E0.5",
+"T466.E0.5",
+"T468.E0.5",
+"T471.E2",
+"T472.E2",
+"T473.E2",
+"T474.E1",
+"T475.E2",
+"T476.E2",
+"T477.E1",
+"T477/E0.5",
+"T479.E1",
+"T489.E0.5",
+"T490.E1",
+"T491.E1",
+"T494.E5",
+"T499.E2K",
+"T510/E1",
+"ZM400.01",
+"ZM401.01",
+"ZM402.01",
+"ZM403.01",
+"ZM405.01",
+"ZM406.01",
+"ZM408.01",
+"ZM409.01",
+"ZM410.01",
+"ZM411.01",
+"ZM413.01",
+"ZM414.01",
+"ZM415.01",
+"ZM416.01",
+"ZM417.01",
+"ZM418.01",
+"ZM419.01",
+"ZM421.01",
+"ZM422.01",
+"ZM423.01",
+"ZM424.01",
+"ZM425.01",
+"ZM426.01",
+"ZM427.01",
+"ZM428.01",
+"ZM430.01",
+"ZM434.01",
+"ZM436.01",
+"ZM450.01",
+"ZM451.01",
+"ZM460.11",
+"ZM462.01",
+"ZM463.01",
+"ZM464.01",
+"ZM465.01",
+"ZM466.01",
+"ZM469.01",
+]
+});
+
+
+var input = document.getElementById("prod-ref");
+new Awesomplete(input, {
+	list: ["A242 MASILLA ACR. FINA BEIGE X 0.200 KG",
+"BP-04 BARNIZ DE MEZCLA BICAPA X 3.5 LT",
+"BP-05 BARNIZ DE MEZCLA BICAPA P/AJUSTE X 3.5 LT",
+"C083-4090 MASILLA RAPIDA GRIS UNIVERSAL X 0.900 LT",
+"C084-6419 PRIMER UNIVERSAL X 0.900 LT.",
+"C086-0580 X 0.900 LT PRIMER RAPIDO ALTO SOLIDOS",
+"C086-6405 X 0.900 LT PRIMER UNIVERSAL 1K",
+"C100-3402 ADITIVO FLEXIBILIZANTE P/ PLASTICO ACS X 250ml",
+"C100-9305 ADITIVO ANTICRATER  X 0.250 LT",
+"C100-9305 Aditivo Anticrater X 0.250 LT",
+"C190-0640 BARNIZ DE 2 COMP SECADO RAPIDO X 0.946 LT",
+"C190-0998 BARNIZ DE 2 COMPONENTES  X   0.785 LTS",
+"C210-0645 ENDURECEDOR P/BARNIZ DE 2 COMP X 0.33LT",
+"C210-0999 ENDURECEDOR P/BANIZ C190-0998 X 0.115 LTS",
+"C210-3087 ENDURECEDOR PARA COLOR POLIURETANICO",
+"C210-3504 ENDURECEDOR P/ IMPRIMACION PU C565-6504  X 0.150 LTS.",
+"C210-9604 ENDURECEDOR SINT ER X0.44",
+"C271-0100 REMOVEDOR PASTOSO X 0.900LT",
+"C275-9605 ZYNAMIX CATALIZADOR P/ESMALTE EPOXI  X 1  LT.",
+"C275-9606 ZYNAMIX CATALIZADOR ACIDO P/WASH PRIMER  X 1.36  LTS.",
+"C551-0220 MASILLA DE 2 COMP X 1.5 KG S/DOSIF.",
+"C562-1142 MASSA DE POLIR NRO. 2 BRANCA X 0.900 LT",
+"C562-1150 PASTA DE PULIR 2 - BASE AGUA x 1KG",
+"C565-6520 IMPRIMACION PU ALTOS SOLIDOSX 0750 LTS",
+"C565-9410 PRIMER PU X3.5",
+"C572-6402 ADHERENTE UNIVERSAL P/PLASTICOS X 0.900 LT",
+"C850-0600 X 1 LT DILUY P/POLIURETANO Y BICAPA",
+"C850-0600 X 5 LT DILUY P/POLIURETANO Y BICAPA",
+"C850-0600 DILUYENTE P/P.U. Y BICAPA - 0.90 LT",
+"C850-0900 X 5 LT SOLUCION DESENGRASANTE",
+"C850-0900 SOLUCION DESENGRASANTE X 0.90 LT",
+"C950-9441 PROTEC TEXT 6 X 0.9 LT",
+"CM-001 BLANCO X 1LT",
+"CM-002 NEGRO X 3.5 LT",
+"CM-003 BLANCO NIEVE X 1 LT",
+"CM-007 NEGRO INTENSO X 1LT",
+"CM-008 CONCENTRADO PRETO AZULADO",
+"CM-010 AZUL ROJIZO X 1LT",
+"CM-011 AZUL FTALO X 1LT",
+"CM-015 VIOLETA X 1LT",
+"CM-016 AZUL LUMINOSO BRILLANTE X 1LT",
+"CM-017 VERDE BRILLANTE X 1 LT",
+"CM-019 AZUL OSCURO PROFUNDO X 1LT",
+"CM-030 AMARILLO LIMON X 1 LT",
+"CM-031 AMARILLO ORO X 1 LT",
+"CM-033 AMARILLO TRANSPARENTE X 1LT",
+"CM-035 ROJO BRILLANTE X 1LT",
+"CM-038 ROJO OXIDO X 1 LT",
+"CM-040 ROJO RUBI X 1 LT.",
+"CM-042 ROJO TRANSPARENTE X 1LT",
+"CM-043 ROJO VIVO X 1LT",
+"CM-050 CASTA„O X 1 LT.",
+"CM-060 BORDO X 1LT",
+"CM-062 VERDE OSCURO X 1 LT",
+"CM-063 AMARILLO VERDOSO X 1 LT",
+"CM-064 ROJO X 1 LT",
+"CM-065 AZUL BRILLANTE X 1LT",
+"CM-068 MAGENTA OSCURO",
+"CM-069 NEGRO AMARILLENTO X 1LT",
+"CM-070 AZUL MARINO X 1LT",
+"CM-071 CONC. GRAFITO X 1 LT",
+"CM-073 CONC. X 1 LT MARRON PERMANENTE",
+"CM-074 CONC. ROJO FUERTE X 1 LT",
+"CM-075 CONC. ROJO PROFUNDO X 1 LT",
+"CM-076 CONC. ROJO BRILLANTE X 1 LT",
+"CM-100 ALUMINIO EXTRA FINO X 3.5 LT",
+"CM-102 ALUMINIO GRUESO X 3.5 LT",
+"CM-103 ALUMINIO GRUESO LUMINOSO X 1LT",
+"CM-105 ALUMINIO MEDIO BRILLANTE X 1LT",
+"CM-106 ALUMINIO MEDIO LUMINOSO X 1LT",
+"CM-107 ALUMINIO FINO BRILLANTE X 1 LT",
+"CM-108 CONC. ALUMINIO BRILLANTE X 1 LT",
+"CM-110 CONCENTRADO ALUMINIO FINO",
+"CM-112 CONCENTRADO ALUMINIO GROSSL BRILHANTE",
+"CM-116 CONCENTRADO ALUMINIO MEDIO",
+"CM-117 CONCENTRADO ALUMINIO FINO LUMINOSO",
+"CM-200 PERLADO AZUL FINO X 1 LT",
+"CM-201 PERLADO AZUL SUPER X 1 LT",
+"CM-202 PERLADO BLANCO FINO X 1LT",
+"CM-203 PERLADO PLATA LUMINOSO X 1LT",
+"CM-204 PERLADO ROJO FINO X 1LT",
+"CM-205 PERLADO ROJO SUPER X 1LT",
+"CM-206 PERLADO VIOLETA X 1 LT",
+"CM-207 BASE MATIZANTE X 1LT",
+"CM-209 DORADO PERLADO X 1 LT",
+"CM-212 DORADO SUPER PERLADO X 1 LT",
+"CM-213 PERLADO AMARILLO X 1 LT",
+"CM-214 VERDE PERLADO X  1 LT",
+"CR-303 CONCENTRADO BRANCO NEVE REDUZIDO",
+"CR-309 CONCENTRADO PRETO REDUZIDO",
+"CR-311 CONCENTRADO AZUL ESVERDEADO REDUZIDO",
+"CR-315 CONCENTRADO VIOLETA REDUZIDO",
+"CR-332 CONCENTRADO AMARELO REDUZIDO",
+"CR-338 CONCENTRADO VERMEHO OXIDO REDUZIDO",
+"CR-377 CONCENTRADO ESVERDEADO REDUZIDO",
+"CX-10 CONCENTRADO DE EFEITO PRATA CRISTAL",
+"CX-12 CONCENTRADO DE EFEITO VERMELHO RUBI",
+"CX-13 CONCENTRADO DE EFEITO AZUL UNIVERSO",
+"CX-14 CONCENTRADO DE EFEITO VERDE LUMINOSO",
+"D700 X 3.5 LT WHITE",
+"D701 X 3.5 LT BLUE BLACK",
+"D702 X 1 LT CARBON BLACK",
+"D703 X 1 LT DELTRON DG TRACE BLUE BLACK",
+"D703 X 3.5 LT TRACE BLUE BLACK",
+"D704 X 1 LT DELTRON DG FAST BLUE",
+"D708 X 1 LT YELLOW OXIDE",
+"D709 X 1 LT MOLY RED",
+"D710 X 1 LT NARANJA LUMINOSO",
+"D711 X 1 LT CARMINE",
+"D717 X 1 LT BRIGHT RED",
+"D718 X 1 LT BRILLIANT YELLOW",
+"D719 X 1 LT VERDANT YELLOW",
+"D720 X 1 LT TRACE WHITE",
+"D721 X 1 LT JET BLACK",
+"D723 X 1 LT VERDANT BLUE",
+"D724 X 1 LT PRUSSIAN BLUE",
+"D725 X 1 LT TRACE FAST BLUE",
+"D728 X 1 LT TRACE YELLOW OXIDE",
+"D729 X 1 LT RED OXIDE",
+"D732 X 1 LT PERMANENT RED",
+"D734 X 1 LT VIOLET",
+"D735 X 1 LT TRACE RED OXIDE",
+"D736 X 1 LT PHTHALO GREEN",
+"D737 X 1 LT GREEN GOLD",
+"D740 X 3.5 LT BLACK",
+"D741 X 1 LT BRIGHT BLUE",
+"D744 X 1 LT WARM YELLOW",
+"D746 X 1 LT MAGENTA",
+"D748 X 1 LT TRANSPARENT MARROON",
+"D749 X 1 LT MARRON",
+"D750 X 1 LT OLIVE",
+"D751 X 1 LT WHITE PEARL",
+"D752 X 1 LT RED",
+"D753 X 1 LT BASECOAT WHITE",
+"D754 X 1 LT TRANSPARENT BLUE",
+"D756 X 1 LT BLUE BACK",
+"D757 X 1 LT RUBY",
+"D759 X 1 LT BASE MATEANTE",
+"D761 X1 LT RICH RED BLUE",
+"D763 X 1 LT BLUE PEARL",
+"D765 X 1 LT FINE RED PEARL",
+"D767 X 1 LT FINE SATIN ALUMINIUM",
+"D768 X 1 LT MEDIUM SATIN ALUMINIUM",
+"D769 X 1 LT SILVER EXTRA FINE",
+"D770 X 3.5 LT SILVER FINE",
+"D771 X 3.5 LT SILVER MEDIUM",
+"SILVER COARSE X 1 LT",
+"D772 X 3.5 LT SILVER COARSE",
+"D773 X 1 LT SALMON RED",
+"D776 X 1 LT BLUE",
+"D777 X 1 LT TRANSPARENT GREEN",
+"D778 X 1 LT YELLOW OXIDE",
+"D779 X 1 LT RED OXIDE",
+"D780 X 1 LT BRILLIANT YELLOW",
+"D785 X 1 LT BORDEAUX",
+"D787 X 1 LT ORANGE INTENSE DG",
+"D788 X 1 LT ROSA",
+"D789 X 1 LT BC TINTER JET BLACK",
+"D790 X 1 LT TRANSPARENT ORANGE",
+"D792 X 1 LT NARANJA LUMINOSO",
+"D793 X 1 LT BRIGHT RED PEARL",
+"D794 X 1 LT VERDANT YELLOW",
+"D795 X 1 LT AZUL ROJIZO BRILLANTE",
+"D797 X 1 LT PHTHALO  GREEN",
+"D800 X 1 LT CONCEPT 2020",
+"D8010 X 3 LT Fondo Rapid Greymatic Gris claro",
+"D80170 X 3 LT FONDO RAPID GREYMATIC GRIS OSCURO",
+"D803 X 1 LT CATALIZADOR MS RAPIDO",
+"D807 X 5 LT DELTRON THINNER MEDIO",
+"D808 X 5 LT DELTRON THINNER RAPIDO",
+"MATT CLEARCOAT",
+"MATT CLEARCOAT",
+"SEMI GLOSS CLEARCOAT",
+"D814 X 1 LT FLEXIBILIZANTE",
+"D818 X 0.250 LT ADITIVO ACELERADOR",
+"D820 X 1 LT PROM. DE ADHERENCIA P/PLAST.",
+"D837 X 5 LT DX330 DESENGRASANTE",
+"D839 X 1 LT PRIMA",
+"D839 X 3 LT PRIMA",
+"D8401 X 5 LT WB LOW VOC CLEANER",
+"D841 X 1 LT CATALIZADOR MS MEDIO",
+"D8421 PRIMER EN AEROSOL 1K (G5) X .400LT.",
+"D851 X 1 LT DELTRON THINNER P/PARCHES BC",
+"D854 X 1 LT TRANSPARENT SEALER",
+"D863 X 1 LT CATALIZADOR MS ACELERADO",
+"D868 X 1 LT DELTRON THINNER P/PARCHES DG",
+"D895 X 1 LT DELTRON COLOUR BLENDER",
+"D899 X 1 LT ANTI-SILICONES",
+"D9020 X 0.350 LT DELTRON BC AUTUMN MISTERY",
+"D9021 X 0.350 LT DELTRON BC VIOLA FANTASY",
+"D9022 X 0.350 LT DELTRON BC ARCTIC FIRE",
+"D9023 X 0.350 LT DELTRON BC TROPIC SUNRISE",
+"D942 X 1 LT GRAPHITE BLACK",
+"D943 X 1 LT FINE BLUE PEARL",
+"D944 X 1 LT ALUMINIO DORADO GRANO MEDIO",
+"D945 X 1 LT PERLA AMARILLO ORO",
+"D946 X 1 LT ALUMINIO LENTIC.EXTRA FINO",
+"D952 X 1 LT FINE LENTICULAR ALUMINIUM",
+"D953 X 1 LT COARSE TENTICULAR ALUMINIUM",
+"D954 X 1 LT ESTRA FINE WHITE PEARL",
+"D935/955 X 1 LT COPPER PEARL",
+"D936/956 X 1 LT YELLOW PEARL",
+"D937/957 X 1 LT GREEN PEARL",
+"D938/958 X 1 LT VIOLET PEARL",
+"D939/959 X 1 LT ULTRA FINE WHITE",
+"D960 X 1 LT PERLA ROJA",
+"D961 X 1 LT DELTRON BC PERLA VERDE ROJIZA",
+"D964 X 1 LT AMARILLO LUMINOSO",
+"D965 X 1 LT BC ORANGE PEARL",
+"D966 X 1 LT TRACE WHITE BC",
+"D967 X 1 LT TRACE BLACK BC",
+"D968 X 1 LT TRACE RED OXIDE BC",
+"D969 X 1 LT TRACE YELLOW OXIDE BC",
+"D970 X 1 LT TRACE BLUE BC",
+"D971 X 1 LT TRACE GREEN BC",
+"D976 X 1 LT BASICO MAGENTA",
+"D977 X 1 LT RED SHADE BLUE",
+"D978 X 1 LT BASICO SCARLET",
+"D979 X 1 LT BASICO TRANSPARENT VIOLET.",
+"D980 X 1 LT BASICO TRANSPARENT GOLD.",
+"D981 X 1 LT BASICO INTENSE VIOLET.",
+"D983 X 1 LT DELTRON BC ORANGE ALUMINIUM",
+"D985 X 1LT BLUE ALUMINUM",
+"D989 X 1 LT BC COARSE SILVER DOLLAR ALUMINIUN",
+"D990 X 1 LT DELTRON BC FINE GLACIER WHITE",
+"D991 X 1 LT DELTRON BC RUBINE",
+"DC3000 X 20 LT HIGH VELOCITY CLEARCOAT",
+"DC3000 X 0.946 LT HIGH VELOCITY CLEARCOAT",
+"DC4000 X 0.946 LT  VELOCITY PREMIUM CLEARCOAT",
+"DCH3070 X 1 LT LOW TEMP. HARDENER FOR DC3000",
+"DCH3070 X 0.237 LT LOW TEMPERATURE HARDENER FOR DC3000/DC4000",
+"DCH3085 X 1 LT MEDIUM HARDENER FOR DC3000/DC4000",
+"DCH3085 X 0.237 LT MEDIUM HARDENER FOR DC3000/DC4000",
+"DOX113 FILTRO DE PAPEL EEUU",
+"DOX125 SUPERFINE FILTERS FOR WATERBORNE PAINTS",
+"DOX251 X 946 CC COPA PLASTICA P/ MEZCLADO PPG",
+"TAPAS PARA COPAS PLASTICAS",
+"DUL1800 MASILLA POLIESTER X 1 KG.",
+"DUL1800 X 1.500 KG MASILLA POLIESTER",
+"DUL2011 X 1 LT DILUYENTE P/ POLIURETANO",
+"DUL2021 ENDURECEDOR PARA BARNIZ 2020 X 0.100 LT.",
+"DUL2030 X 0.785 LT DULON BARNIZ BI-COMPONENTE",
+"DUL2031 X 0.115 LT DULON CATAL  P/BNIZ BI-COMPONENTE",
+"DUL2042 CATALIZADOR P/PRIMER DUL2041 X 0.100 LT",
+"DUL2045 PRIMER POLIURETANO X 0.800 LT",
+"DUL604 BARNIZ DE MEZCLA ARICLICO P/SOLIDOS X 3.5 LT",
+"DUL605 BARNIZ DE MEZCLA ARICLICO P/METALIZADOS X 3.5 LT",
+"DUL612 AMARILLO VERDOSO X 1 LT",
+"DUL621 ROJO X 1 LT",
+"DUL623 ROJO LIMPIO X 1 LT",
+"DUL631 AMARILLO LIMON X 1 LT",
+"DUL632 AZUL 1 LT",
+"DUL635 AZUL NEPTUNO X 1 LT",
+"DUL636 BLANCO HIELO X 1 LT",
+"DUL638 CASTANO OSCURO X 1 LT",
+"DUL642 VERDE X 1 LT",
+"DUL644 ROJO INTENSO X 1 LT",
+"DUL645 VIOLETA INTENSO X 1 LT",
+"DUL646 NEGRO PALIDO X 1 LT",
+"DUL647 ROJO TRANSPARENTE X 3.5 LT",
+"DUL648 ROJO VINO X 1 LT",
+"DUL649 AMARILLO DORADO X 1 LT",
+"DUL671 ALUMINIO REDONDO GRUESO X 3.5 LT",
+"DUL675 ALUMINIO EXTRA FINO  X 3.5 LT",
+"DUL690 AZUL TE?IDOX 1 LT",
+"DUL691 AMARILLO TE?IDO X 1 LT",
+"DUL692 NEGRO TE?IDO X 1 LT",
+"DUL693 ROJO TE?IDO X 1 LT",
+"DUL698  AZUL FTALO X 1 LT",
+"DUL699  OXIDO DE HIERRO X 1 LT",
+"DUL700 ROJO FUEGO X 1 LT",
+"DUL701 NARANJA VIVO X 1 LT",
+"DUL704 AZUL MARINO  X 1 LT",
+"DUL708 CONC. X 1 LT MARRON PERMANENTE",
+"DUL710 CONC. ROJO PROFUNDO X 1 LT",
+"DUL713 CONC. GRAFITO X 1 LT",
+"DUL9291 X 1 LT PRIMER 1K ALTO SOLIDO",
+"DUL9294 X 0.900 LT PRIMER UNIVERSAL",
+"EC800 X 3.785 LT ULTRA FAST 2.1 CLEARCOAT",
+"ECA81 ACCELERATED REDUCER - FAST x 0.946 Lt",
+"ECA83 ACCELERATED REDUCER - FAST x 0.946 Lt",
+"ECH8075 X 0.946 LT CLEARCOAT HARDENER",
+"F300 X 3.5 LT CONCEN. BLANCO",
+"F301 X 3.5 LT CONCEN. RUBI",
+"F302 X 3.5 LT CONCEN. VIOLETA",
+"F304 X 3.5 LT CONCEN. ROJO",
+"F305 X 3.5 LT CONCEN.ROJO ESCARLATA",
+"F306 X 3.5 LT CONCEN. AMARILLO ESPLENDIDO.",
+"F308 X 3.5 LT CONCEN. AMARILLO ORG. CLARO",
+"F309 X 3.5 LT CONCEN. NARANJA ORG. CLARO",
+"F310 X 3.5 LT CONCEN. AMARILLO CROMO CLARO",
+"F311 X 3.5 LT CONCEN. AMARILLO CROMO",
+"F312 X 3.5 LT CONCEN. NARANJA",
+"F313 X 3.5 LT CONCEN. AMARILLO ORG.",
+"F314 X 3.5 LT CONCEN. VERDE MEDIO",
+"F315 X 3.5 LT CONCEN. VERDE ORG. OSCURO",
+"F317 X 3.5 LT CONCEN. OXIDO AMARILLO",
+"F318 X 3.5 LT CONCEN. NEGRO",
+"F319 X 3.5 LT CONCEN.OXIDO ROJO",
+"F320 X 3.5 LT CONCEN. AZUL ORG.",
+"F321 X 3.5 LT CONCEN. AZUL NOCHE",
+"F323 X 3.5 LT CONCEN. ROJO VIVO",
+"F324 X 3.5 LT CONCEN. NEGRO INTENSO",
+"F325 X 3.5 LT CONCEN. PERM. NARANJA",
+"F341 X 5 LT RES. POLIURET. LINEA 350",
+"F342 X 3.5 LT RESINA POLIURET. MATE",
+"F343 X 5 LT RES. POLIURET. LINEA 280",
+"F351 X 5 LT RESINA EPOXI",
+"F352 X 3.5 LT RESINA EPOXI TEXT.",
+"F359 X 1 LT CATALIZADOR EPOXI",
+"F359 X 1 LT CAT. EPOXI",
+"F362 X 1 LT CAT. MS RAPIDO",
+"F363 X 1 LT CAT. 280",
+"F365 X 2 LT CAT. WASH PRIMER",
+"F372 X 5 LT DILUYENTE STANDARD",
+"F373 X 5 LT DILUYENTE RAPIDO",
+"F381 X 1 LT ADIT. ACELERANTE",
+"F390 X 5 LT CLEAR 2K",
+"F392 X 3.5 LT FONDO 2K MAS./PROT.",
+"F393 X 4 LT WASH PRIMER BASE S/CROM.",
+"F398 X 5 LT SELLADOR 2K",
+"F420 CLEAR PU 290",
+"F421 X 3.5 LT BASE BLANCA PU 290",
+"P190-376 X 1 LT 2K MIXING CLEAR",
+"P190-6100 X 4 LT AUTO REFINISH CLEAR PAINT",
+"PERFORMANCE CLEAR COAT. 1 LT.",
+"P190-625 X 1 LT M. S. CLEARCOAT",
+"P190-625 X 5 LT M. S. CLEARCOAT",
+"P192-475 X 1 LT SOLID COL. BC CONTROL",
+"P192-528 X 2.5 LT HIGH AL. FLIP CONTROL",
+"P192-528 X 1LT 2K HIGH AL. FLIP CONTROLLER",
+"P192-5600 X 2.5 LT FLIP CONTROLLER",
+"P210-6270 X 2.5 LT LOW TEMPERATURE HARDENER",
+"P210-842 HS. FAST HARDENER X 1 LTS",
+"P210-922 X 1 LT M. S. HARDENER (FAST)",
+"P273-1051 X 1 LT BASE COAT FADEOUT ADD",
+"P420-902 X 1 LT R/T PALE WHITE",
+"P420-903 X 1 LT MEDIUM PALE YELLOW.",
+"P420-904 X 1 LT TRANSPARENT BLACK",
+"P420-905 X 1 LT YELLOW OXIDE",
+"P420-907 X 1 LT RED OXIDE",
+"P420-908 X 1 LT R/T RUSSET",
+"P420-910 X 1 LT R/T DEEP BLUE",
+"P420-920 X 1 LT VIOLET",
+"P420-926 X 1 LT SUPER RED",
+"P420-930 X 1 LT BLUE LAKE",
+"P420-933 X 3.5 LT BLUE  BLACK",
+"P420-938 X 1 LT TONE CONTROLLER",
+"P420-942 X 1 LT TRANSOXIDE RED",
+"P420-952 X 1 LT FAST BLUE",
+"P420-952  2 X 3.5 LT FAST BLUE",
+"P420-960 X 1 LT R/T BURGUNDY",
+"P420-975 X 1 LT BRONZE GREEN",
+"P420-977 X 1 LT STRONG MAROON",
+"P420-978 X 1 LT BROWN",
+"P420-981 X 1 LT FAST MAROON",
+"P420-982 X 1 LT TRANSOXIDE YELLOW",
+"P420-983 X 1 LT STRONG YELLOW",
+"P425-900 X 3.5 LT SUPER WHITE",
+"P425-921 X 1 LT H. S. CLARET",
+"P425-922 X 1 LT H. S. LAGOON  BLUE",
+"P425-941 X3,5 LT H. S. STRONG RED",
+"2K HS MIXING BASIC STRONG RED",
+"P425-948 X 1 LT H. S. BLACK",
+"P425-950 X 1 LT H. S. JET  BLACK",
+"P425-954 X 1 LT H. S. BLUE GREEN",
+"P425-956 X 1 LT SUPER BLUE",
+"P425-957 X 1 LT H. S.  FAST BLUE",
+"P425-971 X 1 LT H. S. BRILLANT RED 1 L",
+"P425-984 X 1 LT HS.BRIGHT MEDIUM AL.",
+"P425-985 X 1 LT ALUMINIUM  FINE",
+"P425-986 X 3.5 LT ALUMINIUM MEDIUM",
+"P425-987 X 3.5 LT MEDIUM COARSE",
+"P425-988 X 1 LT ALUMINIUM COARSE",
+"P425-989 X 1 LT ALUM. VERY COARSE",
+"P425-991  Fine Satin Aluminium x 1 Lt",
+"P425-992 X 1 LT SHINING COARSE ALUMINIUM",
+"P425-998 X 1 LT HS COARSE SILVER DOLLAR ALUMINIUM",
+"P425-EB02 X 1 LT ENGINE BAY TINTER",
+"P426-HE01 X 1 LT HS BLUE FROST",
+"P426-HE03 X 1 LT GRAPHITE FLAKE",
+"P426-HE04 X 1 LT GOLD FLASH",
+"P426-HE05 X 1 LT ORANGE FLASH",
+"P426-HE07 X 1 LT BLUE FLASH",
+"P426-PP05 X 1 LT PEARL WHITE",
+"P426-PP06 X 1 LT FINE PEARL WHITE",
+"P426-PP07 X 1 LT PEARL BLUE",
+"P426-PP08 X 1 LT RED PEARL",
+"P426-PP09 X 1 LT PEARL GOLD",
+"P426-PP10 X 1 LT COPPER PEARL",
+"P426-PP60 X 1 LT PEARL WHITE ULTRAF.",
+"P426-PP61 X 1 LT PEARL RED FINE",
+"P426-PP62 X 1 LT RUSSET PEARL FINE",
+"P426-PP63 X 1 LT PEARL BLUE FINE",
+"P426-PP64 X 1 LT PEARL VIOLET MEDIUM",
+"P426-PP65 X 1 LT PEARL GREEN MEDIUM",
+"P426-PP68 X 0.330 LT ORANGE PEARL",
+"P429-923 X 1 LT BRIGHT MAROON",
+"P429-937 X 1 LT PALE  YELLOW",
+"P429-961 X 1 LT HS CLEAN MAGENTA",
+"P429-967 X 1 LT DEEP ANGLE BLACK",
+"P429-972 X 1 LT BRIGHT AMBER",
+"P429-973 X1 LT HS BRIGHT ORANGE",
+"P429-976 X 1 LT H. S. RED VIOLET",
+"P429-980 X 1 LT SPEED RED",
+"P433-XR10 X 0.330 LT SCRYSTAL SILVER XIRALLIC",
+"P433-XR11 X 0.330 LT SUMBEAM GOLD XIRALLIC",
+"P433-XR12 X 0.330 LT RADIANT RED XIRALLIC",
+"P433-XR13 X 0.330 LT GALAXY BLUE XIRALLIC",
+"P433-XR14 X 0.330 LT STELLAR GREEN XIRALLIC",
+"P433-XR15 X 0.330 LT SOLARIS RED XIRALLIC",
+"P433-XR16 X 0.330 LT FIRESIDE COPPER XIRALLIC",
+"P433-XR18 X 0.330LT AMETHIST DREAM",
+"P434-CS31 X 0.330 LT 2K MIXING COLOUR AUTUMN MYSTERY",
+"P434-CS32 X 0.330 LT 2K MIXING COLOUR VIOLA FANTASY",
+"P434-CS33  ARCTIC FIRE X 0.33LT.",
+"P434-CS34 TROPIC SUNRISE X .33LT.",
+"P565-554 X 1 LT MATTING AGENT",
+"P565-761 X 1 LT APAR DE RELLENO GRAN ESPESOR",
+"P572-4001 PROMOTOR DE ADHERENCIA PARA PLASTICOS  X 0.946lt",
+"P850-1401 X 1 LT FADE OUT THINNER",
+"P850-1492 X 5 LT MEDIUM  THINNER",
+"PRLX1  X 0.113 KG CRYSTAL RED PEARL",
+"PRLX2  X 0.113 KG CRYSTAL SILVER PEARL",
+"PRLX3  X 0.113 KG CRYSTAL GOLD PEARL",
+"PRLX4 X 0.113 KG CRYSTAL BLUE PEARL",
+"PRLX5 X 0.113 KG STELLAR GREEN PEARL",
+"PRLX6 X 0.113 KG SOLARIS RED PEARL",
+"PRLX7 X 0.113 KG FIRESIDE COPPER PEARL",
+"PRLX8 DELTRON BC COSMIC TURQUOISE PEARL",
+"SX1070 STACK CLOTH",
+"T400 ENVIROBASE TINTERS WHITH X 2 LT",
+"T4000.E0.5 CRISTAL SILVER x 0.5 LT",
+"T4001.E0.5 SUNBEAM GOLD x 0.5 LT",
+"T4002.E0.5 RADIANT RED x 0.5 LT",
+"T4003.E0.5 GALAXY BLUE x 0.5 LT",
+"T4004.E0.5 STELLAR GREEN x 0.5 LT",
+"T4005.E0.5 SOLARIS RED x 0.5 LT",
+"T4006.E0.5 FIRESIDE COPPER x 0.5 LT",
+"T4008 ENVIROBASE AMETHIST DREAM X 0.25 LT",
+"T4008 ENVIROBASE AMETHIST DREAM X 0.5 LT",
+"T401 ENVIROBASE TINTERS ULTRA  FINE WHITE X 0.5 LT",
+"T402 ENVIROBASE TINTERS TRACE WHITE X 0.5 LT",
+"T403 Micro White X 0.5 LT",
+"T4031 ENVIROBASE  AUTUMN MYSTERY X 0.25 LT",
+"T4031 ENVIROBASE  AUTUMN MYSTERY X 0.5 LT",
+"T4032 ENVIROBASE VIOLA FANTASY X 0.25 LT",
+"T4032 ENVIROBASE VIOLA FANTASY X 0.5 LT",
+"T4033 ENVIROBASE ARCTIC FIRE X 0.25 LT",
+"T4033 ENVIROBASE ARCTIC FIRE X 0.5 LT",
+"T4034 ENVIROBASE TROPIC SUNRISE X 0.25 LT",
+"T4034 ENVIROBASE TROPIC SUNRISE X 0.5 LT",
+"T404 ENVIROBASE TINTERS TRACE BLUE BLACK X 0.5 LT",
+"T4040 ENVIROBASE ORANGE FLASH X 0.5 LT",
+"T405 ENVIROBASE TINTERS GRAPHITE BLACK X 0.5 LT",
+"T406 ENVIROBASE BLUE BLACK X 1 LT",
+"T407 ENVIROBASE JET BLACK X 2 LT",
+"T409 ENVIROBASE DEEP BLACK X 2 LT",
+"T411 ENVIROBASE TINTERS BLUE X 1 LT",
+"T412 ENVIROBASE TRANSPARENT BLUE X 1 LT",
+"T413 ENVIROBASE BRIGHT BLUE X 1 LT",
+"T414 ENVIROBASE TINTERS RICH BLUE X 2 LT",
+"T415 ENVIROBASE TRACE BLUE X 0.5 LT",
+"T420 HIGH STRENGHT BLUE X 1 LT",
+"T421 OLIVE X 0.5 LT",
+"T422 YELLOW OXIDE X 0.5 LT",
+"T423 TRACE YELLOW OXIDE X 0.5 LT",
+"T425 Permanent Yellow x 0.5 LT",
+"T426 WARM YELLOW x 0.5 LT",
+"T427 YELOW X 1 LT",
+"T4281 ENVIROBASE HP SOLID YELLOW X 0.5 LT",
+"T429 TRANSPARENT GOLDEN YELLOW x 0.5 LT",
+"T430 ENVIROBASE HIGH STRENGHT TRANSPARENT GREEN X 1 LT",
+"T431 ENVIROBASE HIGH STRENGHT PHTALO GREEN X 1 LT",
+"T4311 ENVIROBASE HC GREEN BLUE X 0.5 LT",
+"T432 TRANSPARENT RED x 1 LT",
+"T4321 Envirobase HC Yellow",
+"T433 BRILLIANT ORANGE x 0.5 LT",
+"T4341 HC Transoxide Red x 0.5 Lts",
+"T4342 ENVIROBASE HC MAGENTA X 0.5 LT",
+"T4343 ENVIROBASE HC ORGANIC RED X 0.5 LT",
+"T435 SALMON RED x 1 LT",
+"T436 RED OXIDE x 0.5 LT",
+"T438 ROSE x 1 LT",
+"T440 TRACE RED OXIDE x 0.5 LT",
+"T441  CARMINE x 0.5 LT",
+"T442  BROWN x 0.5 LT",
+"T443  VIOLET x 1 LT",
+"T444 BORDEAUX x 1 LT",
+"T445 TRANSPARENT MAGENTA X 0.5 LT",
+"T447 BRIGHT RED x 1 LT",
+"T448 RUSSET x 1 LT",
+"T451.E0.5 EXTRA FINE WHITE PEARL x 0.5 LT",
+"T452.E0.5 FINE WHITE PEARL x 0.5 LT",
+"T453.E1 WHITE PEARL x 1 LT",
+"T454.E1 BRIGHT RED PEARL x 1 LT",
+"T455.E0.5 FINE BLUE PEARL x 0.5 LT",
+"T456.E1 BLUE PEARL x 1 LT",
+"T457 ENVIROBASE GREEN PEARL X 0.5 LT",
+"T458.E0.5 BLUE-GREEN PEARL x 0.5 LT",
+"T459.E1 COPPER PEARL x 1 LT",
+"T460.E0.5 YELLOW PEARL x 0.5 LT",
+"T461.E0.5 GOLDEN YELLOW PEARL x 0.5 LT",
+"T462.E1 FINE RED PEARL x 1 LT",
+"T465.E0.5 RED PEARL x 0.5 LT",
+"T466.E0.5 ORANGE PEARL x 0.5 LT",
+"T468.E0.5 VIOLET PEARL x 0.5 LT",
+"T471.E2 EXTRA FINE METALLIC x 2 LT",
+"T472 FINE LENTICULAR METALLIC x 2 LT",
+"T473.E2 MEDIUM METALLIC x 2 LT",
+"T474.E1 FINE  METALLIC x 1 LT",
+"T475.E2 MEDIUM LENTICULAR METALLIC x 2 LT",
+"T476.E2 COARSE LENTICULAR METALLIC x 2 LT",
+"T477.E1 EXTRA COARSE  METALLIC x 1 LT",
+"EXTRA COARSE METALLIC",
+"T479 ENVIROBASE HP COARSE SILVER DOLLAR ALUMINIUM",
+"T489.E0.5 MEDIUM ALUMINIUM GOLD x 0.5 LT",
+"T490.E1 TINTED CLEAR ADDITIVE x 1 LT",
+"T491.E1 MATTING BASE x 1 LT",
+"T494.E5  ENVIROBASE  THINNER x 5 LT",
+"T499 AGENTE FLOCULANTE X 2 KG.",
+"T510/E1 Convertidor WB Engine Bay x 1 Lt",
+"ZM-400 ZYNAMIX ROJO X  3.5 LTS",
+"ZM-401 ZYNAMIX BASE BLANCA PU ACRILICA   X 3.5 LTS",
+"ZM-402 ZYNAMIX NARANJA  X 3.5 LTS.",
+"ZM-403 ZYNAMIX ROJO OXIDO X 3.5 LTS.",
+"ZM-405 ZYNAMIX RUBI X 3.5 LTS",
+"ZM-406 ZYNAMIX VIOLETAI X 3.5 LTS",
+"ZM-408 ZYNAMIX AMARILLO CROMO X 3.5 LTS",
+"ZM-409 ZYNAMIX MATEANTE X 3.5 LTS",
+"ZM-410 ZYNAMIX AMARILLO OXIDO X 3.5 LTS",
+"ZM-411 ZYNAMIX NEGRO X 3.5 LTS",
+"ZM-413 ZYNAMIX VERDE MEDIO  X 3.5 LTS",
+"ZM-414 ZYNAMIX OSCURO X 3.5 LTS",
+"ZM-415 ZYNAMIX AZUL X 3.5 LTS",
+"ZM-416 ZYNAMIX AZUL NOCHE X 3.5 LTS",
+"ZM-417 ZYNAMIX BLANCO X 3.5 LTS",
+"ZM-418 ZYNAMIX BASE SINTETICO BLANCO X 3.5 LTS",
+"ZM-419 ZYNAMIX BASE BLANCO PU ALQUIDICO X 3.5 LTS",
+"ZM-421 ZYNAMIX NEGRO BAJO TINTING X 3.5 LTS",
+"ZM-422 ZYNAMIX AZUL BAJO TINTING X 3.5 LTS",
+"ZM-423 ZYNAMIX AMARILLO BAJO TINTING X 3.5 LTS.",
+"ZM-424 ZYNAMIX ROJO BAJO TINTING X 3.5 LTS.",
+"ZM-425 ZYNAMIX NARANJA SINTETICO X 3.5 LTS",
+"ZM-426 ZYNAMIX ROSA X 3.5 LTS.",
+"ZM-427 ZYNAMIX AMARILLO CLARO X 3.5 LTS.",
+"ZM-428 ZYNAMIX AMARILLO X 3.5 LTS.",
+"ZM-430 ZYNAMIX CLEAR PU ALQUIDICO X 3.5 LTS.",
+"ZM-434 ZYNAMIX CLEAR PU ACRILICO X 3.5 LTS",
+"ZM-436 ZYNAMIX CLEAR SINT EXT RAPIDO X 3.5 LTS",
+"ZM-450 ZYNAMIX ALUMINIO FINO X 3.5 LTS",
+"ZM-451M3 ALUMINIO GRUESO X 3.5 LTS",
+"ZM-460 ZYNAMIX SOLUCION SECANTE X 1 LT",
+"ZM-462 ZYNAMIX AMARILLO ORGANICO LUMINOSO X 3.5 LTS",
+"ZM-463 ZYNAMIX AMARILLO ESPLENDIDO X 3.5 LTS",
+"ZM-464 ZYNAMIX NARANJA ORGANICO LUMINOSO X 3.5 LTS",
+"ZM-465 ZYNAMIX AMARILLO ANARANJADO X 3.5 LTS",
+"ZM-466 ZYNAMIX NARANJA PERMANENTE X 3.5 LTS",
+"ZM-469 ZYNAMIX VERMELHO LIMPO X 3.5LTS.",
+]
+});
+
+var input = document.getElementById("clientes-list");
+new Awesomplete(input, {
+	list: ["FE-COLOR SPA.",
+"HUNTER DOUGLAS CHILE S.A.",
+"POSCO ENGINEERING CO. LTD.",
+"POSCO ENGINEERING y CONSTRUCTI",
+"PRECOR S.A.",
+"DUCASSE INDUSTRIAL S.A.",
+"HUNTER DOUGLAS CHILE S.A.",
+"ALUCRIL LIMITADA",
+"ARAYA PEREIRA Y CIA. LTDA.",
+"COMPONENTES AUTOMOTRICES CARS.",
+"CONSTR.Y APLICACIONES CONTRACT",
+"ELECTRO PAINT S.A.",
+"FE-COLOR SPA",
+"FERNANDO MASCARO HERRERA",
+"IND. METALURGICA URSUS TROTTER",
+"INTERMOB S.A.",
+"LUIS MARIO GONZALEZ MEDINA",
+"MOLLER SPA",
+"OMAR OCTAVIO VELIZ CARRERA",
+"RECUBRIMIENTOS PLASTICOS LTDA.",
+"RECUPERADORA TEXTIL LTDA.",
+"RENE GALLARDO ORTEGA",
+"RICARDO JAQUE MANDIOLA",
+"RIGOBERTO GOMEZ CHAVEZ",
+"SANCHEZ DIAZ Y CIA. LTDA.",
+"SEMAFOROS JORGE LAVEZZOLO VALE",
+"SERVICIOS AMP COLOR Y CIA. LTD",
+"SINDELEN S.A.",
+"SOC.COM.MELLA Y DIAZ Y CIA LTD",
+"CERVECERIA  BOLIVIANA  NACIONA",
+"CONDENSA S.A.",
+"ELABORADORA DE ENVASES S.A.",
+"PPG INDUSTRIES COLOMBIA LTDA.",
+"REXAM CHILE S.A.",
+"ANFRUNS Y CIA LTDA.",
+"AUTOMOTORA MIGUEL JACOB Y CIA ",
+"AUTOMOTRIZ QUELLE LTDA.",
+"BORIS FERNANDEZ LEIVA",
+"CARDENAS & VILLANUEVA LIMITADA",
+"CLAUDIO ALBERTO JARA CACERES",
+"CLELIA CORDOVA GUAJARDO Y OTRO",
+"COMERCIAL E INV. CROSUR LTDA.",
+"COMERCIAL P&A LTDA.",
+"DANILO VALENCIA",
+"DISTRIB. DE PINTURAS MUK LTDA.",
+"DISTRIB. ESPINOSA R Y R LTDA",
+"ELDI RADOMIL LIZANA HERNANDEZ",
+"EMPRESA NACIONAL DE AERONAUTIC",
+"ERNESTO DIAZ TORREJON",
+"FERNANDO ENRIQUE OYARZUN PASTE",
+"GARRIDO E HIJOS LIMITADA",
+"GENERAL MOTORS CHILE LTDA.",
+"GERMAN ANGEL AGUILERA",
+"HANS CHRISTIAN BARENDS SCHEU",
+"HUGO VICTORIANO ANTIPAN SAIHUE",
+"INVERSIONES ULTRACOLOR LTDA.",
+"IRMA HORTENSIA MORENO MORALES",
+"ISOLINA PALACIOS SOTO Y OTROS",
+"JENSEN AUTOMOTRIZ LTDA.",
+"JOSE LUIS CAICHA CARVAJAL",
+"JOSE LUIS VERGARA RIFFO",
+"JOSE OCHOA E HIJOS LTDA",
+"JUAN FLORES DIAZ",
+"LUIS ALFARO SOLAR",
+"LUIS RAMIREZ MOREIRA",
+"LUIS SEPULVEDA GAMBOA",
+"MAREPINO LTDA.",
+"MEGACOLOR LTDA",
+"PINTURAS AUTOMOTRICES C & C LT",
+"PINTURAS SAINZ  LTDA.",
+"PPG INDUSTRIES CHILE S.A..",
+"RAASCH Y CIA. LTDA.",
+"RAUL ELIGIO FLORES VERGARA",
+"RODRIGO RAMOS JARAMILLO VENTA ",
+"SEGUNDO SALINAS E HIJOS LTDA.",
+"SERGIO MARTINEZ",
+"SERGIO OCHOA CASTILLO",
+"SERVICIO AUTOMOTRIZ FELIPE MIL",
+"SERVICIOS INTEGRALES PARA AUTO",
+"SUSANA DE LAS MERCEDES FLORES ",
+"TOYOTA CHILE S.A.",
+"WILLIAM CARVAJAL FARIAS",
+]
+});
+
+/*
+
+var input = document.getElementById("clientes-list");
+new Awesomplete(input, {
+	list: ["FE-COLOR SPA.",
+"HUNTER DOUGLAS CHILE S.A.",
+"POSCO ENGINEERING CO. LTD.",
+"POSCO ENGINEERING y CONSTRUCTI",
+"PRECOR S.A.",
+"DUCASSE INDUSTRIAL S.A.",
+"HUNTER DOUGLAS CHILE S.A.",
+"ALUCRIL LIMITADA",
+"ARAYA PEREIRA Y CIA. LTDA.",
+"COMPONENTES AUTOMOTRICES CARS.",
+"CONSTR.Y APLICACIONES CONTRACT",
+"ELECTRO PAINT S.A.",
+"FE-COLOR SPA",
+"FERNANDO MASCARO HERRERA",
+"IND. METALURGICA URSUS TROTTER",
+"INTERMOB S.A.",
+"LUIS MARIO GONZALEZ MEDINA",
+"MOLLER SPA",
+"OMAR OCTAVIO VELIZ CARRERA",
+"RECUBRIMIENTOS PLASTICOS LTDA.",
+"RECUPERADORA TEXTIL LTDA.",
+"RENE GALLARDO ORTEGA",
+"RICARDO JAQUE MANDIOLA",
+"RIGOBERTO GOMEZ CHAVEZ",
+"SANCHEZ DIAZ Y CIA. LTDA.",
+"SEMAFOROS JORGE LAVEZZOLO VALE",
+"SERVICIOS AMP COLOR Y CIA. LTD",
+"SINDELEN S.A.",
+"SOC.COM.MELLA Y DIAZ Y CIA LTD",
+"CERVECERIA  BOLIVIANA  NACIONA",
+"CONDENSA S.A.",
+"ELABORADORA DE ENVASES S.A.",
+"PPG INDUSTRIES COLOMBIA LTDA.",
+"REXAM CHILE S.A.",
+"ANFRUNS Y CIA LTDA.",
+"AUTOMOTORA MIGUEL JACOB Y CIA ",
+"AUTOMOTRIZ QUELLE LTDA.",
+"BORIS FERNANDEZ LEIVA",
+"CARDENAS & VILLANUEVA LIMITADA",
+"CLAUDIO ALBERTO JARA CACERES",
+"CLELIA CORDOVA GUAJARDO Y OTRO",
+"COMERCIAL E INV. CROSUR LTDA.",
+"COMERCIAL P&A LTDA.",
+"DANILO VALENCIA",
+"DISTRIB. DE PINTURAS MUK LTDA.",
+"DISTRIB. ESPINOSA R Y R LTDA",
+"ELDI RADOMIL LIZANA HERNANDEZ",
+"EMPRESA NACIONAL DE AERONAUTIC",
+"ERNESTO DIAZ TORREJON",
+"FERNANDO ENRIQUE OYARZUN PASTE",
+"GARRIDO E HIJOS LIMITADA",
+"GENERAL MOTORS CHILE LTDA.",
+"GERMAN ANGEL AGUILERA",
+"HANS CHRISTIAN BARENDS SCHEU",
+"HUGO VICTORIANO ANTIPAN SAIHUE",
+"INVERSIONES ULTRACOLOR LTDA.",
+"IRMA HORTENSIA MORENO MORALES",
+"ISOLINA PALACIOS SOTO Y OTROS",
+"JENSEN AUTOMOTRIZ LTDA.",
+"JOSE LUIS CAICHA CARVAJAL",
+"JOSE LUIS VERGARA RIFFO",
+"JOSE OCHOA E HIJOS LTDA",
+"JUAN FLORES DIAZ",
+"LUIS ALFARO SOLAR",
+"LUIS RAMIREZ MOREIRA",
+"LUIS SEPULVEDA GAMBOA",
+"MAREPINO LTDA.",
+"MEGACOLOR LTDA",
+"PINTURAS AUTOMOTRICES C & C LT",
+"PINTURAS SAINZ  LTDA.",
+"PPG INDUSTRIES CHILE S.A..",
+"RAASCH Y CIA. LTDA.",
+"RAUL ELIGIO FLORES VERGARA",
+"RODRIGO RAMOS JARAMILLO VENTA ",
+"SEGUNDO SALINAS E HIJOS LTDA.",
+"SERGIO MARTINEZ",
+"SERGIO OCHOA CASTILLO",
+"SERVICIO AUTOMOTRIZ FELIPE MIL",
+"SERVICIOS INTEGRALES PARA AUTO",
+"SUSANA DE LAS MERCEDES FLORES ",
+"TOYOTA CHILE S.A.",
+"WILLIAM CARVAJAL FARIAS",]
+});
+*/

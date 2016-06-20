@@ -1,0 +1,375 @@
+/* GLOBAL STYLES
+-------------------------------------------------- */
+/* Padding below the footer and lighter body text */
+
+body {
+  padding-bottom: 40px;
+  color: #5a5a5a;
+}
+
+
+/* CUSTOMIZE THE NAVBAR
+-------------------------------------------------- */
+
+/* Special class on .container surrounding .navbar, used for positioning it into place. */
+.navbar-wrapper {
+  position: relative;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 20;
+}
+
+/* Flip around the padding for proper display in narrow viewports */
+.navbar-wrapper > .container {
+  padding-right: 0;
+  padding-left: 0;
+}
+.navbar-wrapper .navbar {
+  padding-right: 0px;
+  padding-left: 0px;
+}
+.navbar-wrapper .navbar .container {
+  width: auto;
+}
+
+header a:hover{
+    color: #ff7c13!important;
+    }
+
+.btn-primary{
+    background-color: #0078a9;    
+}
+
+.btn-primary:hover{
+    background-color: #ff7c13;
+    }
+
+.volver{
+    position: absolute;
+    right: 20%;
+    top: 4px;
+    }
+
+
+.volver .btn{
+    border: 0px solid #000;
+    }
+
+.volver .btn-primary{
+    background-color: rgba(240, 248, 255, 0);
+    }
+
+a{
+    transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+    }
+
+a:hover{
+    text-decoration: none;
+    color: deeppink!important;
+    transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+    }
+
+a:active{
+    color: deeppink!important;
+    }
+
+
+
+/* CUSTOMIZE THE CAROUSEL
+-------------------------------------------------- */
+
+/* Carousel base class */
+.carousel {
+  height: 500px;
+  margin-bottom: 60px;
+}
+/* Since positioning the image, we need to help out the caption */
+.carousel-caption {
+  z-index: 10;
+}
+
+/* Declare heights because of positioning of img element */
+.carousel .item {
+  height: 500px;
+  background-color: #777;
+}
+.carousel-inner > .item > img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 100%;
+  height: 500px;
+}
+
+
+/* MARKETING CONTENT
+-------------------------------------------------- */
+
+/* Center align the text within the three columns below the carousel */
+.marketing .col-lg-4 {
+  margin-bottom: 20px;
+  text-align: center;
+}
+.marketing h2 {
+  font-weight: normal;
+}
+.marketing .col-lg-4 p {
+  margin-right: 10px;
+  margin-left: 10px;
+}
+
+.mark{
+    width: 80%;
+    max-width: 200px;
+    max-height: 200px;
+    height: 80%;
+    background-color: rgba(240, 248, 255, 0);
+    }
+
+
+/* Featurettes
+------------------------- */
+
+.featurette-divider {
+  margin: 80px 0; /* Space out the Bootstrap <hr> more */
+}
+
+/* Thin out the marketing headings */
+.featurette-heading {
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.title2 h2{
+    margin-bottom: 50px;
+    font-size: 3.2em!important;
+}
+
+.process{
+    margin-top: 0px;
+}
+
+
+.process h3{
+    color: #5a5a5a;
+    font-weight: normal;
+     transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+}
+
+.process h3:hover{
+    text-decoration: none;
+    color: deeppink!important;
+    transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+    }
+
+.process a{
+    text-decoration: none!important;
+    transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+    }
+
+.process a:hover{
+    text-decoration: none!important;
+    color: deeppink!important;
+    transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+    }
+
+.inline-block{
+    display: inline-block;
+    }
+
+.back{
+    position: absolute;
+    color: white;
+    top: 5px;
+    right: 25%;
+    z-index: 99999;
+    }
+
+.back a{
+    color: white!important;
+    }
+
+.back a :hover{
+    color: #ff7c13!important;
+    }
+
+.paginador{
+    margin-top: -10px!important;
+
+    }
+
+/* RESPONSIVE CSS
+-------------------------------------------------- */
+
+@media (min-width: 768px) {
+  /* Navbar positioning foo */
+  .navbar-wrapper {
+    margin-top: 0px;
+  }
+  .navbar-wrapper .container {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+  .navbar-wrapper .navbar {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  /* The navbar becomes detached from the top, so we round the corners */
+  .navbar-wrapper .navbar {
+    border-radius: 4px;
+  }
+
+  /* Bump up size of carousel content */
+  .carousel-caption p {
+    margin-bottom: 20px;
+    font-size: 21px;
+    line-height: 1.4;
+  }
+
+  .featurette-heading {
+    font-size: 50px;
+  }
+}
+
+@media (min-width: 992px) {
+  .featurette-heading {
+    margin-top: 120px;
+  }
+}
+
+
+/* ---- COLOR ---- */
+
+.white{
+    color: white!important;
+    }
+
+/* ---- EFECTOS ---- */
+
+.grow{
+    transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+    }
+
+.grow:hover { 
+    -webkit-transform: scale(1.1);
+    -ms-transform: scale(1.1);
+    transform: scale(1.1);
+    transition: 0.5s ease;
+  	-o-transition: 0.5s ease;
+  	-webkit-transition: 0.5s ease;
+    }
+    
+
+/* ----------- Awesomplete ----------*/
+
+[hidden] { display: none; }
+
+.visually-hidden {
+	position: absolute;
+	clip: rect(0, 0, 0, 0);
+}
+
+div.awesomplete {
+	display: block;
+	position: relative;
+}
+
+
+div.awesomplete > ul {
+	position: absolute;
+	left: 0;
+	z-index: 1;
+	min-width: 100%;
+	box-sizing: border-box;
+	list-style: none;
+	padding: 0;
+	border-radius: .3em;
+	margin: .2em 0 0;
+	background: hsla(0,0%,100%,.9);
+	background: linear-gradient(to bottom right, white, hsla(0,0%,100%,.8));
+	border: 1px solid rgba(0,0,0,.3);
+	box-shadow: .05em .2em .6em rgba(0,0,0,.2);
+	text-shadow: none;
+}
+
+div.awesomplete > ul[hidden],
+div.awesomplete > ul:empty {
+	display: none;
+}
+
+@supports (transform: scale(0)) {
+	div.awesomplete > ul {
+		transition: .3s cubic-bezier(.4,.2,.5,1.4);
+		transform-origin: 1.43em -.43em;
+	}
+	
+	div.awesomplete > ul[hidden],
+	div.awesomplete > ul:empty {
+		opacity: 0;
+		transform: scale(0);
+		display: block;
+		transition-timing-function: ease;
+	}
+}
+
+	/* Pointer */
+	div.awesomplete > ul:before {
+		content: "";
+		position: absolute;
+		top: -.43em;
+		left: 1em;
+		width: 0; height: 0;
+		padding: .4em;
+		background: white;
+		border: inherit;
+		border-right: 0;
+		border-bottom: 0;
+		-webkit-transform: rotate(45deg);
+		transform: rotate(45deg);
+	}
+
+	div.awesomplete > ul > li {
+		position: relative;
+		padding: .2em .5em;
+		cursor: pointer;
+	}
+	
+	div.awesomplete > ul > li:hover {
+		background: hsl(200, 40%, 80%);
+		color: black;
+	}
+	
+	div.awesomplete > ul > li[aria-selected="true"] {
+		background: hsl(205, 40%, 40%);
+		color: white;
+	}
+	
+    div.awesomplete mark {
+        background: hsl(65, 100%, 50%);
+    }
+
+    div.awesomplete li:hover mark {
+        background: hsl(68, 100%, 41%);
+    }
+
+    div.awesomplete li[aria-selected="true"] mark {
+        background: hsl(86, 100%, 21%);
+        color: inherit;
+    }
