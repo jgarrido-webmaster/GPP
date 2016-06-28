@@ -252,7 +252,7 @@ public function logout() {
 			if($existe == 0) {
 			$this->Usuario->create();
 			if ($this->Usuario->save($this->request->data)) {
-				    	$this->Session->setFlash($this->mensajeOK('Usuario creado exitosamente'));
+				$this->Session->setFlash($this->mensajeOK('Usuario creado exitosamente'));
 				$this->redirect(array('action' => 'login'));
 			} else {
 			    $this->Session->setFlash($this->mensajeERROR('Intente nuevamente'));

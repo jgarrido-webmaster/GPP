@@ -3,7 +3,7 @@
       <div class="standalone-page registration-page">
         <div class="standalone-page-logo">
           <a href="index.html">
-            <img src="/images/required/logo-default.png" width="156" height="44" alt="Logo" />
+            <img src="/images/sddsd.png" width="156" height="44" alt="Logo" />
           </a>
         </div>
         <div class="standalone-page-top-border">
@@ -63,14 +63,7 @@
                     <?php echo $this->Form->end(); ?>
             </div>
           </div>
-          <div class="row">
-            <div class="col-xs-12">
-              <div class="change-section">
-                <h3 class="heading">Ya estas registrado?</h3>
-                <a href="/usuarios/login" class="btn btn-default btn-block">Identificarme</a>
-              </div>
-            </div>
-          </div>
+         
         </div>
       </div>
     </div>

@@ -373,3 +373,9 @@ div.awesomplete > ul:empty {
         background: hsl(86, 100%, 21%);
         color: inherit;
     }
+    
+ul.datosClientes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}

@@ -17,13 +17,6 @@ class Promocion extends AppModel {
  * @var array
  */
 	public $belongsTo = array(
-		'Producto' => array(
-			'className' => 'Producto',
-			'foreignKey' => 'producto_id',
-			'conditions' => '',
-			'fields' => '',
-			'order' => ''
-		),
 		'Usuario' => array(
 			'className' => 'Usuario',
 			'foreignKey' => 'usuario_id',

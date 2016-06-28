@@ -14,19 +14,19 @@
             </div>
             <div id="navbar" class="navbar-collapse collapse">
               <ul class="nav navbar-nav">
-                <li class="active"><a href="index.php" data-transition="flip">Home</a></li>
-                <li><a href="#about" data-transition="slide">About</a></li>
-                <li><a href="#contact" data-transition="slide">Contact</a></li>
+                <li class="active"><a href="/principal/index" data-transition="flip">Inicio</a></li>
+                <li><a href="#about" data-transition="slide">Perfil</a></li>
+                <li><a href="#contact" data-transition="slide">Mis ventas</a></li>
                 <li class="dropdown">
-                  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false" >Dropdown <span class="caret"></span></a>
+                  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false" >Administrar <span class="caret"></span></a>
                   <ul class="dropdown-menu">
-                    <li><a href="#" data-transition="slide">Action</a></li>
-                    <li><a href="#" data-transition="slide">Another action</a></li>
-                    <li><a href="#" data-transition="slide">Something else here</a></li>
+                    <li><a href="/productos/index" rel="external" >Gestionar Productos</a></li>
+                    <li><a href="/clientes/index" data-transition="slide">Gestionar Clientes</a></li>
+                    <li><a href="/promociones/index" rel="external" >Gestionar Promociones</a></li>
                     <li role="separator" class="divider"></li>
-                    <li class="dropdown-header">Nav header</li>
-                    <li><a href="#" data-transition="slide">Separated link</a></li>
-                    <li><a href="#" data-transition="slide">One more separated link</a></li>
+                    <li class="dropdown-header">Ventas</li>
+                    <li><a href="/ordenes/index" data-transition="slide">Gestionar Solicitudes</a></li>
+                    <li><a href="/productos/stock" data-transition="slide">Gestionar Stock</a></li>
                   </ul>
                 </li>
                 <li><a href="/usuarios/logout" rel="external">Logout</a></li>
