@@ -11,7 +11,7 @@
         <div class="row">
           <div class="col-md-12">
              
-              <?php echo $this->Form->create('Promocion',array('action' => 'add', 'role' => 'form','method' => 'post','type' => 'file' , 'rel' => 'external')); ?>
+              <?php echo $this->Form->create('Promocion',array('action' => 'add', 'role' => 'form','method' => 'post','type' => 'file' , 'rel' => 'external','data-ajax' => 'false')); ?>
 
                  <div class="form-group">
                     
@@ -45,20 +45,28 @@
               <div class="table-responsive">
                   <table class="table table-hover">
                       <tr>
-                          <td class="info">Item</td>
-                          <td class="info">SKU</td>
-                          <td class="info">Código</td>
-                          <td class="info">Stock</td>
+                          <td class="info">Titulo</td>
+                          <td class="info">Desde</td>
+                          <td class="info">Hasta</td>
+                          <td class="info">PDF</td>
                       </tr>
-                      <?php foreach ($productos as $key => $producto) { ?>
+                      <?php foreach ($promociones as $key => $promocion) { ?>
                       <tr>
-                          <td><a href="/productos/ver/<?php echo $producto["Promocion"]["id"]; ?>" data-toggle="modal" data-target="#myModal"><?php echo $producto["Promocion"]["item"]; ?></a></td>
-                          <td><a href="/productos/ver/<?php echo $producto["Promocion"]["id"]; ?>" data-toggle="modal" data-target="#myModal"><?php echo $producto["Promocion"]["sku"]; ?></a></td>
-                          <td><a href="/productos/ver/<?php echo $producto["Promocion"]["id"]; ?>" data-toggle="modal" data-target="#myModal"><?php echo $producto["Promocion"]["codigo"]; ?></a></td>
-                          <td><a href="/productos/ver/<?php echo $producto["Promocion"]["id"]; ?>" ><?php echo $producto["Promocion"]["stock"]; ?></a></td>
-                          <td class="danger text-center"><a href="/productos/delete/<?php echo $producto["Promocion"]["id"]; ?>" rel="external">x</a></td>
+                          <td><a href="/promociones/ver/<?php echo $promocion["Promocion"]["id"]; ?>" data-toggle="modal" data-target="#myModal<?php echo $promocion["Promocion"]["id"]; ?>"><?php echo $promocion["Promocion"]["titulo"]; ?></a></td>
+                          <td><a href="/promociones/ver/<?php echo $promocion["Promocion"]["id"]; ?>" data-toggle="modal" data-target="#myModal<?php echo $promocion["Promocion"]["id"]; ?>"><?php echo date("d-m-Y",strtotime($promocion["Promocion"]["desde"])); ?></a></td>
+                          <td><a href="/promociones/ver/<?php echo $promocion["Promocion"]["id"]; ?>" data-toggle="modal" data-target="#myModal<?php echo $promocion["Promocion"]["id"]; ?>"><?php echo date("d-m-Y",strtotime($promocion["Promocion"]["hasta"])); ?></a></td>
+                          <td><a href="/<?php echo $promocion["Promocion"]["documento"]; ?>" rel="external">Descargar</a></td>
+                          <td class="danger text-center"><a href="/promociones/delete/<?php echo $promocion["Promocion"]["id"]; ?>" rel="external">x</a></td>
                       </tr>
-                    
+                      
+          <div class="modal fade" id="myModal<?php echo $promocion["Promocion"]["id"]; ?>" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+            <div class="modal-dialog" role="document">
+            <div class="modal-content" data-role="content">
+              
+            </div>
+           
+            </div>
+          </div>
                       <?php } ?>
                   </table>
               </div>
@@ -75,38 +83,7 @@
           <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
             <div class="modal-dialog" role="document">
             <div class="modal-content" data-role="content">
-              <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="myModalLabel">Información de Promocion</h4>
-              </div>
-                  <div class="modal-body">
-                      <div class="container">
-                      <div class="row">
-                       <div class="col-md-12">
-                       <h4>Nombre producto</h4>
-                       </div>
-                           <div class="col-md-6 col-xs-6">
-                            <p>SKU: 00000000</p>
-                            <p>Cod: 00000000</p>
-                            <p>Item: AAAAAA BBBBBB CCCCC</p>
-                            <h5>Stock: 1000L</h5>
-                            <h5>Precio: $200.000</h5>
-                           </div>
-                           <div class="col-md-6 col-xs-6">
-                                <img class="img-responsive" src="images/productos/deltron.jpg" alt="deltron">
-                           </div>
-                       </div><!-- row -->
-
-                       <div class="row">
-                        <div class="col-md-12">  
-                        <p>Descripción: Lorem ipsum dolor sit amet, consectetur adipisicing elit. Molestiae soluta, doloremque. Aperiam nihil eum laborum unde ad nesciunt dolores, quo. Qui temporibus, laborum sequi. Sed laborum fugit doloribus vero explicabo.</p>
-                        </div>
-                      </div><!-- row -->
-                      </div><!-- container -->
-                  </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-              </div>
+              
             </div>
            
             </div>

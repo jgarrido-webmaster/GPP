@@ -32,21 +32,7 @@ class Producto extends AppModel {
  *
  * @var array
  */
-	public $hasMany = array(
-		'Promocion' => array(
-			'className' => 'Promocion',
-			'foreignKey' => 'producto_id',
-			'dependent' => false,
-			'conditions' => '',
-			'fields' => '',
-			'order' => '',
-			'limit' => '',
-			'offset' => '',
-			'exclusive' => '',
-			'finderQuery' => '',
-			'counterQuery' => ''
-		)
-	);
+
 
 
 /**

@@ -3,7 +3,7 @@
 -- http://www.phpmyadmin.net
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 20-06-2016 a las 14:22:21
+-- Tiempo de generación: 29-06-2016 a las 21:24:35
 -- Versión del servidor: 10.1.13-MariaDB
 -- Versión de PHP: 5.6.21
 
@@ -40,6 +40,13 @@ CREATE TABLE `clientes` (
   `created` datetime DEFAULT NULL,
   `modified` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+--
+-- Volcado de datos para la tabla `clientes`
+--
+
+INSERT INTO `clientes` (`id`, `usuario_id`, `nombre`, `apellidos`, `empresa`, `telefono`, `celular`, `rut`, `razonSocial`, `giro`, `created`, `modified`) VALUES
+(3, 0, 'Javier', 'Garrido Ceballo', 'Grupoweb', '9877777655', '6666666', '11.222.333-4', 'Gas', 'aSDas', '2016-06-28 00:33:10', '2016-06-28 00:33:10');
 
 -- --------------------------------------------------------
 
@@ -79,6 +86,14 @@ CREATE TABLE `direcciones` (
   `modified` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+--
+-- Volcado de datos para la tabla `direcciones`
+--
+
+INSERT INTO `direcciones` (`id`, `cliente_id`, `nombre`, `direccion`, `ciudad`, `region`, `usuario_id`, `created`, `modified`) VALUES
+(1, 3, 'Direccion Principal', 'Av Ohiggins 1186 Depto 000', 'Concepción', '8 Bio - Bio', NULL, '2016-06-28 01:13:33', '2016-06-28 01:13:33'),
+(2, 3, 'Direccion Talca', 'Talca Av. 444 depto 901', 'Talca', '', NULL, '2016-06-28 01:19:43', '2016-06-28 01:19:43');
+
 -- --------------------------------------------------------
 
 --
@@ -95,9 +110,26 @@ CREATE TABLE `productos` (
   `precio` int(15) NOT NULL,
   `usuario_id` int(10) NOT NULL,
   `activo` int(1) NOT NULL DEFAULT '1',
+  `img` varchar(500) DEFAULT NULL,
   `created` datetime NOT NULL,
   `modified` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+--
+-- Volcado de datos para la tabla `productos`
+--
+
+INSERT INTO `productos` (`id`, `item`, `descripcion`, `sku`, `codigo`, `stock`, `precio`, `usuario_id`, `activo`, `img`, `created`, `modified`) VALUES
+(1, 'Acido M', '', '12333', '0001', 100, 15000, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 02:19:51', '2016-06-28 02:19:51'),
+(3, 'dfsdf5', 'dasdasdasd', '3434d', 'e3434', 244, 43434, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 02:29:26', '2016-06-28 02:29:26'),
+(4, 'xczxczxv', '<zx<zx', 'asdasd', 'sadasd', 44, 344, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 02:34:54', '2016-06-28 02:34:54'),
+(5, 'dsdfsfdfds', '5555', '555', '4555', 555, 444, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 02:40:24', '2016-06-28 02:40:24'),
+(6, 'fdssdffdsfsd', 'werwerwer', '444', 'fssfdfsd', 555, 324, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 03:32:03', '2016-06-28 03:32:03'),
+(7, 'sadasdad', 'wewr', '234234', '234234', 44, 444, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 03:34:08', '2016-06-28 03:34:08'),
+(8, 'sgdfg', 'dfgdsgsdg', '345345', '344345', 345, 435435, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 03:35:01', '2016-06-28 03:35:01'),
+(9, 'sdffsd', 'sfsgdfg', '345345', '345345', 345, 345345, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 03:37:35', '2016-06-28 03:37:35'),
+(10, 'sdfsdf', 'werwerwerwe', '55', '555', 555, 55, 0, 1, 'uploads/28062016033933SYMWHTxx.png', '2016-06-28 03:39:33', '2016-06-28 03:39:33'),
+(11, 'werwer', 'ertert', '6456', '5345', 546, 345, 0, 1, 'uploads/28062016033949SYMWHTxx.png', '2016-06-28 03:39:49', '2016-06-28 03:39:49');
 
 -- --------------------------------------------------------
 
@@ -123,12 +155,9 @@ CREATE TABLE `productos_compras` (
 
 CREATE TABLE `promociones` (
   `id` int(10) NOT NULL,
-  `producto_id` int(10) NOT NULL,
-  `usuario_id` int(10) NOT NULL,
+  `usuario_id` int(10) DEFAULT NULL,
   `titulo` varchar(200) NOT NULL,
   `descripcion` text,
-  `precio` int(15) NOT NULL,
-  `stock` int(15) NOT NULL,
   `activo` int(1) NOT NULL DEFAULT '1',
   `desde` date NOT NULL,
   `hasta` date NOT NULL,
@@ -136,6 +165,15 @@ CREATE TABLE `promociones` (
   `created` int(11) NOT NULL,
   `modified` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+--
+-- Volcado de datos para la tabla `promociones`
+--
+
+INSERT INTO `promociones` (`id`, `usuario_id`, `titulo`, `descripcion`, `activo`, `desde`, `hasta`, `documento`, `created`, `modified`) VALUES
+(1, NULL, 'asdasdasd', 'asdasdasd', 1, '2016-06-16', '2016-06-17', NULL, 1467227063, 1467227063),
+(2, NULL, 'fasasd', 'asdasdasd', 1, '2016-06-12', '2016-06-12', NULL, 1467227141, 1467227141),
+(4, NULL, 'fsddssdf', 'sdfsdf', 1, '2016-06-22', '2016-06-25', 'uploads/29062016090746RSA1522.pdf', 1467227266, 1467227266);
 
 -- --------------------------------------------------------
 
@@ -249,7 +287,7 @@ ALTER TABLE `usuarios`
 -- AUTO_INCREMENT de la tabla `clientes`
 --
 ALTER TABLE `clientes`
-  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 --
 -- AUTO_INCREMENT de la tabla `compras`
 --
@@ -259,12 +297,12 @@ ALTER TABLE `compras`
 -- AUTO_INCREMENT de la tabla `direcciones`
 --
 ALTER TABLE `direcciones`
-  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 --
 -- AUTO_INCREMENT de la tabla `productos`
 --
 ALTER TABLE `productos`
-  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 --
 -- AUTO_INCREMENT de la tabla `productos_compras`
 --
@@ -274,7 +312,7 @@ ALTER TABLE `productos_compras`
 -- AUTO_INCREMENT de la tabla `promociones`
 --
 ALTER TABLE `promociones`
-  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(10) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 --
 -- AUTO_INCREMENT de la tabla `tipos`
 --

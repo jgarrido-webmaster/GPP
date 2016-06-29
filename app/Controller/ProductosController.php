@@ -115,7 +115,7 @@ class ProductosController extends AppController {
 					$this->Session->setFlash($this->mensajeERROR('Intente nuevamente'));
 					$this->redirect(array('action' => 'index'));
 				}
-				
+
 
 			} else {
 		 		$this->Session->setFlash($this->mensajeERROR('El código de producto ya existe'));
@@ -125,7 +125,7 @@ class ProductosController extends AppController {
 
                     }
            
-		}
+		
 	
 	}
 

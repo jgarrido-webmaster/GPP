@@ -13,7 +13,44 @@ class PromocionesController extends AppController {
  *
  * @var array
  */
-	public $components = array('Paginator');
+		 public $components = array(
+        'Session',
+        'Auth' => array(
+        	'loginAction' => array(
+            'controller' => 'usuarios',
+            'action' => 'login'
+        ),
+            'loginRedirect' => array('controller' => 'principal', 'action' => 'index'),
+            'authenticate' => array(
+            	'Form' => array(
+            		'userModel' => 'Usuario',
+                	'fields' => array('username' => 'username','password' => 'password')
+          		  )),
+            'logoutRedirect' => array('controller' => 'principal', 'action' => 'index')
+        )
+    );
+
+ public function beforeFilter() {
+        $this->Auth->allow('login','add','registrar','edit');
+
+
+    }
+
+ public function mensajeERROR($mensaje){
+
+ 	return '<div class="alert alert-danger alert-block">
+                  <button type="button" class="close" data-dismiss="alert">&times;</button>
+                  <h4><i class="fa fa-bell-alt"></i>ERROR!</h4>
+                  <p>'.$mensaje.'</p></div>';
+ }
+
+  public function mensajeOK($mensaje){
+
+ 	return '<div class="alert alert-success alert-block">
+                  <button type="button" class="close" data-dismiss="alert">&times;</button>
+                  <h4><i class="fa fa-bell-alt"></i>COMPLETADO!</h4>
+                  <p>'.$mensaje.'</p></div>';
+ }
 
 /**
  * index method
@@ -21,8 +58,8 @@ class PromocionesController extends AppController {
  * @return void
  */
 	public function index() {
-		$this->Promocion->recursive = 0;
-		$this->set('promociones', $this->Paginator->paginate());
+		$promociones = $this->Promocion->find("all");
+		$this->set(compact("promociones"));
 	}
 
 /**
@@ -32,10 +69,13 @@ class PromocionesController extends AppController {
  * @param string $id
  * @return void
  */
-	public function view($id = null) {
+	public function ver($id = null) {
+		$this->layout = "ajax";
+
 		if (!$this->Promocion->exists($id)) {
-			throw new NotFoundException(__('Invalid promocion'));
+			throw new NotFoundException(__('Promocion Invalida'));
 		}
+
 		$options = array('conditions' => array('Promocion.' . $this->Promocion->primaryKey => $id));
 		$this->set('promocion', $this->Promocion->find('first', $options));
 	}
@@ -111,14 +151,13 @@ class PromocionesController extends AppController {
 	public function delete($id = null) {
 		$this->Promocion->id = $id;
 		if (!$this->Promocion->exists()) {
-			throw new NotFoundException(__('Invalid promocion'));
+			throw new NotFoundException(__('Promocion Invalida'));
 		}
-		$this->request->allowMethod('post', 'delete');
+
 		if ($this->Promocion->delete()) {
-			$this->Session->setFlash(__('The promocion has been deleted.'));
-		} else {
-			$this->Session->setFlash(__('The promocion could not be deleted. Please, try again.'));
-		}
-		return $this->redirect(array('action' => 'index'));
+			$this->Session->setFlash($this->mensajeOK('Promoción eliminada exitosamente'));
+			$this->redirect(array('action' => 'index'));
+		} 
+
 	}
 }
